@@ -31,7 +31,6 @@
 ---
 
 ## 3. 技術スタック
-
 ### Backend
 - Laravel 12.x
 - DB: SQLite（開発）→ 将来 MySQL/PostgreSQL
@@ -340,17 +339,41 @@
 
 ## 10. ローカル開発手順（例）
 
-### Backend（Laravel）
+## ディレクトリ構成
+```text
+farm-app/
+├── backend/    # Laravel
+├── frontend/   # React
+└── README.md
+```
+
+## セットアップ
+
+### 前提
+- PHP（Homebrew）
+- Composer
+- Git
+
+### 依存関係のインストール
 ```bash
 cd backend
+composer install
+```
+
+### 環境変数の設定
+```bash
 cp .env.example .env
 php artisan key:generate
+```
 
+### Backend（Laravel）
 # SQLite 利用（database/database.sqlite が存在する前提）
+```bash
 php artisan migrate
 
 php artisan serve
 # http://127.0.0.1:8000
+```
 
 ## 11. 重要な実装方針（バリデーション & 例外処理）
 
@@ -400,5 +423,3 @@ php artisan serve
 
 - timeline  
   「いつ」を直感的に把握できるガント風UI
-
-
