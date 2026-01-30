@@ -46,7 +46,7 @@
 
 - Frontend: React（予定）
 - Backend: Laravel（API）
-- DB: （開発）SQLite 〜 （本番）MySQL/PostgreSQL 想定
+- DB: （開発）SQLite / （本番）MySQL・PostgreSQL 想定
 - Auth: Laravel Sanctum（予定）
 - Realtime: Laravel Broadcasting + Reverb（予定）
 - Storage: ローカル → S3互換ストレージ（将来）
@@ -54,33 +54,37 @@
 ---
 
 ## ディレクトリ構成
-
+```text
 farm-app/
-├── backend/ # Laravel
-├── frontend/ # React（予定）
+├── backend/    # Laravel
+├── frontend/   # React（予定）
 └── README.md
+```
 
----
-
-## セットアップ（Backend / Laravel）
+## セットアップ
 
 ### 前提
+
 - PHP（Homebrew）
 - Composer
 - Git
 
-### 1 依存関係のインストール
+
+### 依存関係のインストール
+
 ```bash
 cd backend
 composer install
+```
 
-2 環境変数の設定
+### 環境変数の設定
+```bash
 cp .env.example .env
 php artisan key:generate
+```
 
-3. 起動
+### 起動
+```bash
 php artisan serve
-
-
-ブラウザで http://127.0.0.1:8000 にアクセスして、Laravelの画面が表示されれば成功です。
-
+```
+- ブラウザで http://127.0.0.1:8000 にアクセスして、Laravelの画面が表示されれば成功です。
