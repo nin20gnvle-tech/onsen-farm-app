@@ -31,9 +31,13 @@ class WorkLogController extends Controller
             return response()->json(['message' => 'no users available'], 422);
         }
 
-        // 二重計測防止（同一ユーザーで running / paused が残っていたらNG）
+        // 二重計測防止（同一ユーザーで当日 running / paused が残っていたらNG）
+        $today = now();
+        $start = $today->copy()->startOfDay();
+        $end = $today->copy()->endOfDay();
         $exists = WorkLog::where('user_id', $userId)
             ->whereIn('status', ['running', 'paused'])
+            ->whereBetween('started_at', [$start, $end])
             ->exists();
 
         if ($exists) {

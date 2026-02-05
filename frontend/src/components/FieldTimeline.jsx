@@ -198,7 +198,12 @@ export default function FieldTimeline({ fieldName, logs, dayStart, dayEnd, gridH
               const x2 = endMin != null ? toLaneX(endMin) : x1 + 8;
               const width = Math.max(10, x2 - x1);
               const pauseSegments = buildPauseSegments(log, startMin, endMin);
-              const timeText = `${log.started_time ?? "--:--"} → ${log.ended_time ?? "--:--"}`;
+              const timeText = `作業時間：${log.started_time ?? "--:--"} → ${log.ended_time ?? "--:--"}`;
+              const timeTextWidth = timeText.length * 7 + 16;
+              const showOutsideTime = width < timeTextWidth;
+              const canShowRight = x1 + width + timeTextWidth + 6 <= LANE_W;
+              const canShowLeft = x1 - timeTextWidth - 6 >= 0;
+              const placeOutsideRight = showOutsideTime && (canShowRight || !canShowLeft);
 
               return (
                 <div
@@ -302,7 +307,7 @@ export default function FieldTimeline({ fieldName, logs, dayStart, dayEnd, gridH
                             whiteSpace: "nowrap",
                           }}
                         >
-                          {timeText}
+                          {!showOutsideTime && timeText}
                           {pauseSegments.map((seg, idx) => {
                             const segLeft = toLaneX(seg.start) - x1;
                             const segWidth = Math.max(2, toLaneX(seg.end) - toLaneX(seg.start));
@@ -321,6 +326,29 @@ export default function FieldTimeline({ fieldName, logs, dayStart, dayEnd, gridH
                             );
                           })}
                         </div>
+                        {showOutsideTime && (
+                          <div
+                            style={{
+                              position: "absolute",
+                              left: placeOutsideRight ? x1 + width + 6 : x1 - 6,
+                              top: 24,
+                              height: 24,
+                              display: "flex",
+                              alignItems: "center",
+                              padding: "0 8px",
+                              borderRadius: 999,
+                              background: "#fff",
+                              border: "1px solid #e5e7eb",
+                              color: "#111827",
+                              fontSize: 12,
+                              fontWeight: 800,
+                              whiteSpace: "nowrap",
+                              transform: placeOutsideRight ? "translateX(0%)" : "translateX(-100%)",
+                            }}
+                          >
+                            {timeText}
+                          </div>
+                        )}
                       </>
                     )}
                   </div>

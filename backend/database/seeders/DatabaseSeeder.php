@@ -8,6 +8,7 @@ use App\Models\TaskType;
 use App\Models\User;
 use Illuminate\Database\Console\Seeds\WithoutModelEvents;
 use Illuminate\Database\Seeder;
+use Illuminate\Support\Facades\Hash;
 
 class DatabaseSeeder extends Seeder
 {
@@ -20,10 +21,14 @@ class DatabaseSeeder extends Seeder
     {
         // User::factory(10)->create();
 
-        User::firstOrCreate(
+        $user = User::firstOrCreate(
             ['email' => 'test@example.com'],
-            ['name' => 'Test User']
+            ['name' => 'Test User', 'role' => 'admin', 'password' => Hash::make('bbbbbbbb')]
         );
+        $user->update([
+            'role' => 'admin',
+            'password' => Hash::make('bbbbbbbb'),
+        ]);
 
         foreach (['第1圃場', '第2圃場', '第3圃場', '第4圃場'] as $name) {
             Field::firstOrCreate(['name' => $name]);

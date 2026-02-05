@@ -1,16 +1,33 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import FieldTimeline from "../components/FieldTimeline";
 import { ymd } from "../lib/time";
 
 const BASE_URL = "http://127.0.0.1:8000";
 
 export default function DashboardPage() {
+  const navigate = useNavigate();
   const [date, setDate] = useState(() => {
     const params = new URLSearchParams(window.location.search);
     const d = params.get("date");
     return d ? new Date(`${d}T00:00:00`) : new Date();
   });
   const role = window.localStorage.getItem("role") || "worker"; // admin | worker
+  const [profileForm, setProfileForm] = useState(() => {
+    try {
+      const saved = JSON.parse(window.localStorage.getItem("profile") || "{}");
+      return {
+        name: saved?.name ?? "",
+        email: saved?.email ?? "",
+        note: saved?.note ?? "",
+        avatar: saved?.avatar ?? "",
+      };
+    } catch {
+      return { name: "", email: "", note: "", avatar: "" };
+    }
+  });
+  const [profileSaved, setProfileSaved] = useState(false);
+  const [passwordRequestStatus, setPasswordRequestStatus] = useState("");
   const [mainTab, setMainTab] = useState("logs"); // logs | inventory | chat | settings
   const dateYmd = useMemo(() => ymd(date), [date]);
 
@@ -61,6 +78,10 @@ export default function DashboardPage() {
   const [stockAdjustForm, setStockAdjustForm] = useState({ item_id: "", quantity: "" });
   const [stockAdjustErr, setStockAdjustErr] = useState("");
   const [stockAdjustLoading, setStockAdjustLoading] = useState(false);
+  const [inviteRole, setInviteRole] = useState("worker");
+  const [inviteLoading, setInviteLoading] = useState(false);
+  const [inviteErr, setInviteErr] = useState("");
+  const [inviteResult, setInviteResult] = useState(null);
 
   const load = async () => {
     setErr("");
@@ -88,9 +109,19 @@ export default function DashboardPage() {
       type: file.type,
       url: URL.createObjectURL(file),
     }));
+    const displayName = profileForm.name || "自分";
     setChatMessages((prev) => [
       ...prev,
-      { id: Date.now(), user: "自分", text, time, files, replyTo: chatReplyTo },
+      {
+        id: Date.now(),
+        user: displayName,
+        avatar: profileForm.avatar || "",
+        isSelf: true,
+        text,
+        time,
+        files,
+        replyTo: chatReplyTo,
+      },
     ]);
     setChatInput("");
     setChatFiles([]);
@@ -139,6 +170,71 @@ export default function DashboardPage() {
     } finally {
       setEditLoading(false);
     }
+  };
+
+  const handleProfileSave = () => {
+    window.localStorage.setItem("profile", JSON.stringify(profileForm));
+    setProfileSaved(true);
+    window.setTimeout(() => setProfileSaved(false), 1500);
+  };
+
+  const handleAvatarChange = (file) => {
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = () => {
+      const result = typeof reader.result === "string" ? reader.result : "";
+      setProfileForm((s) => ({ ...s, avatar: result }));
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const handlePasswordRequest = () => {
+    if (!profileForm.email) {
+      setPasswordRequestStatus("メールアドレスを入力してください");
+      return;
+    }
+    setPasswordRequestStatus("パスワード変更メールを送信しました（仮）");
+    window.setTimeout(() => setPasswordRequestStatus(""), 2000);
+  };
+
+  const handleInviteCreate = async () => {
+    setInviteErr("");
+    setInviteLoading(true);
+    try {
+      const res = await fetch(`${BASE_URL}/api/invites`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Accept: "application/json" },
+        body: JSON.stringify({ role: inviteRole }),
+      });
+      const json = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(json?.message ?? `HTTP ${res.status}`);
+      const inviteUrl = `${window.location.origin}/invite/${json.token}`;
+      setInviteResult({ token: json.token, inviteUrl });
+    } catch (e) {
+      setInviteErr(String(e?.message ?? e));
+    } finally {
+      setInviteLoading(false);
+    }
+  };
+
+  const handleInviteCopy = async () => {
+    if (!inviteResult?.inviteUrl) return;
+    try {
+      await navigator.clipboard.writeText(inviteResult.inviteUrl);
+      setInviteResult((prev) => (prev ? { ...prev, copied: true } : prev));
+      window.setTimeout(() => {
+        setInviteResult((prev) => (prev ? { ...prev, copied: false } : prev));
+      }, 1500);
+    } catch {
+      setInviteErr("コピーに失敗しました。手動でコピーしてください。");
+    }
+  };
+
+  const handleLogout = () => {
+    window.localStorage.removeItem("profile");
+    window.localStorage.removeItem("role");
+    setProfileForm({ name: "", email: "", note: "", avatar: "" });
+    navigate("/login");
   };
 
   useEffect(() => {
@@ -391,7 +487,10 @@ export default function DashboardPage() {
   const activeSections = data?.active ?? [];
   const doneSections = data?.done ?? [];
   const displayActiveSections = activeSections
-    .map((sec) => ({ ...sec, logs: (sec.logs ?? []).filter((log) => log.status === "running") }))
+    .map((sec) => ({
+      ...sec,
+      logs: (sec.logs ?? []).filter((log) => ["running", "paused"].includes(log.status)),
+    }))
     .filter((sec) => (sec.logs?.length ?? 0) > 0);
   const sections = tab === "active" ? displayActiveSections : doneSections;
   const activeCount = displayActiveSections.reduce((sum, sec) => sum + (sec.logs?.length ?? 0), 0);
@@ -580,7 +679,7 @@ export default function DashboardPage() {
 
         {mainTab === "inventory" && (
           <>
-            <div style={{ fontWeight: 900, fontSize: 16 }}>在庫管理</div>
+            <div style={{ fontWeight: 900, fontSize: 16 }}>在庫</div>
             <div style={panel}>
               <div style={{ fontWeight: 800, marginBottom: 6 }}>在庫品目</div>
               {inventoryErr && <div style={{ color: "#b91c1c", fontSize: 12 }}>{inventoryErr}</div>}
@@ -589,13 +688,10 @@ export default function DashboardPage() {
                 <div style={{ color: "#6b7280", fontSize: 12 }}>在庫データがありません</div>
               )}
               {!inventoryLoading && inventoryItems.length > 0 && (
-                <>
-                  <div style={inventoryTitle}>農薬一覧</div>
-                  <div style={inventoryHeader}>
-                    <div />
-                    <div>在庫数</div>
-                  </div>
-                </>
+                <div style={inventoryHeader}>
+                  <div />
+                  <div>在庫数</div>
+                </div>
               )}
               <div style={{ display: "grid", gap: 8 }}>
                 {(() => {
@@ -714,18 +810,22 @@ export default function DashboardPage() {
 
         {mainTab === "chat" && (
           <>
-            <div style={{ fontWeight: 900, fontSize: 16, color: "#0f172a" }}>メッセージ</div>
+            <div style={{ fontWeight: 900, fontSize: 16, color: "#0f172a" }}>チャット</div>
             <div style={chatPanel}>
               <div style={chatList}>
                 {chatMessages.map((msg) => (
-                  <div key={msg.id} style={msg.user === "自分" ? chatRowSelf : chatRow}>
-                    <div style={msg.user === "自分" ? chatHeaderSelf : chatHeader}>
-                      <div style={msg.user === "自分" ? chatAvatarSelf : chatAvatar}>
-                        {(msg.user ?? "?").slice(0, 1)}
+                  <div key={msg.id} style={msg.isSelf ? chatRowSelf : chatRow}>
+                    <div style={msg.isSelf ? chatHeaderSelf : chatHeader}>
+                      <div style={msg.isSelf ? chatAvatarSelf : chatAvatar}>
+                        {msg.avatar ? (
+                          <img src={msg.avatar} alt={msg.user || "アイコン"} style={chatAvatarImg} />
+                        ) : (
+                          (msg.user ?? "?").slice(0, 1)
+                        )}
                       </div>
                       <div style={chatName}>{msg.user}</div>
                     </div>
-                    <div style={msg.user === "自分" ? chatBubbleSelf : chatBubble}>
+                    <div style={msg.isSelf ? chatBubbleSelf : chatBubble}>
                       {msg.replyTo && (
                         <div style={chatReplyBadge}>
                           <div style={chatReplyLabel}>返信先</div>
@@ -861,6 +961,157 @@ export default function DashboardPage() {
             </div>
           </>
         )}
+
+        {mainTab === "settings" && (
+          <>
+            <div style={{ fontWeight: 900, fontSize: 16 }}>会員情報・設定</div>
+            {role === "admin" && (
+              <div style={panel}>
+                <div style={panelTitle}>招待</div>
+                <div style={{ color: "#6b7280", fontSize: 13, marginBottom: 8 }}>
+                  招待リンクを作成して作業者/管理者を追加します。
+                </div>
+                <div style={settingsGrid}>
+                  <label style={settingsLabel}>
+                    権限
+                    <select
+                      value={inviteRole}
+                      onChange={(e) => setInviteRole(e.target.value)}
+                      style={settingsInput}
+                    >
+                      <option value="worker">作業者</option>
+                      <option value="admin">管理者</option>
+                    </select>
+                  </label>
+                </div>
+                {inviteErr && <div style={{ color: "#b91c1c", fontSize: 12, marginTop: 8 }}>{inviteErr}</div>}
+                {inviteResult?.inviteUrl && (
+                  <div style={{ marginTop: 10 }}>
+                    <div style={{ color: "#6b7280", fontSize: 12, marginBottom: 4 }}>招待URL</div>
+                    <div style={{ display: "grid", gap: 6 }}>
+                      <input value={inviteResult.inviteUrl} readOnly style={settingsInput} />
+                      <button style={settingsSaveBtn} onClick={handleInviteCopy}>
+                        {inviteResult.copied ? "コピーしました" : "コピー"}
+                      </button>
+                    </div>
+                  </div>
+                )}
+                <div style={settingsRow}>
+                  <div style={{ color: "#6b7280", fontSize: 12 }} />
+                  <button style={settingsSaveBtn} onClick={handleInviteCreate} disabled={inviteLoading}>
+                    {inviteLoading ? "作成中..." : "招待リンクを作成"}
+                  </button>
+                </div>
+              </div>
+            )}
+            <div style={panel}>
+              <div style={panelTitle}>基本情報</div>
+              <div style={settingsGrid}>
+                <label style={settingsLabel}>
+                  氏名
+                  <input
+                    type="text"
+                    value={profileForm.name}
+                    onChange={(e) => setProfileForm((s) => ({ ...s, name: e.target.value }))}
+                    style={settingsInput}
+                    placeholder="例: 山田 太郎"
+                  />
+                </label>
+                <label style={settingsLabel}>
+                  アイコン
+                  <div style={avatarRow}>
+                    <div style={avatarPreview}>
+                      {profileForm.avatar ? (
+                        <img src={profileForm.avatar} alt="アイコン" style={avatarImage} />
+                      ) : (
+                        <span style={avatarPlaceholder}>未設定</span>
+                      )}
+                    </div>
+                    <div style={{ display: "grid", gap: 6 }}>
+                      <input
+                        type="file"
+                        accept="image/*"
+                        style={avatarInput}
+                        onChange={(e) => {
+                          const file = e.target.files?.[0];
+                          handleAvatarChange(file);
+                          e.target.value = "";
+                        }}
+                      />
+                      {profileForm.avatar && (
+                        <button
+                          type="button"
+                          style={avatarRemoveBtn}
+                          onClick={() => setProfileForm((s) => ({ ...s, avatar: "" }))}
+                        >
+                          画像を削除
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                </label>
+                <label style={settingsLabel}>
+                  メールアドレス
+                  <input
+                    type="email"
+                    value={profileForm.email}
+                    onChange={(e) => setProfileForm((s) => ({ ...s, email: e.target.value }))}
+                    style={settingsInput}
+                    placeholder="example@example.com"
+                  />
+                </label>
+                <label style={settingsLabel}>
+                  メモ
+                  <textarea
+                    value={profileForm.note}
+                    onChange={(e) => setProfileForm((s) => ({ ...s, note: e.target.value }))}
+                    style={settingsTextarea}
+                    placeholder="連絡事項や所属など"
+                  />
+                </label>
+              </div>
+              <div style={settingsRow}>
+                <div style={settingsHint}>
+                  役割: <span style={settingsBadge}>{role === "admin" ? "管理者" : "作業者"}</span>
+                </div>
+                <button style={settingsSaveBtn} onClick={handleProfileSave}>
+                  {profileSaved ? "保存しました" : "保存"}
+                </button>
+              </div>
+            </div>
+
+            <div style={panel}>
+              <div style={panelTitle}>パスワード変更</div>
+              <div style={{ color: "#6b7280", fontSize: 13, marginBottom: 8 }}>
+                登録済みメールアドレス宛に変更用URLを送信します。
+              </div>
+              {passwordRequestStatus && (
+                <div style={{ color: "#0f172a", fontSize: 12, marginBottom: 6 }}>{passwordRequestStatus}</div>
+              )}
+              <div style={settingsRow}>
+                <div style={{ color: "#6b7280", fontSize: 12 }}>
+                  宛先: {profileForm.email || "未入力"}
+                </div>
+                <button style={settingsSaveBtn} onClick={handlePasswordRequest}>
+                  変更メールを送る
+                </button>
+              </div>
+            </div>
+
+            <div style={panel}>
+              <div style={panelTitle}>ログアウト</div>
+              <div style={{ color: "#6b7280", fontSize: 13, marginBottom: 8 }}>
+                この端末のログイン情報を削除して、ログイン画面に戻ります。
+              </div>
+              <div style={settingsRow}>
+                <div style={{ color: "#6b7280", fontSize: 12 }} />
+                <button style={settingsSaveBtn} onClick={handleLogout}>
+                  ログアウト
+                </button>
+              </div>
+            </div>
+          </>
+        )}
       </div>
 
       {/* Action Bar */}
@@ -868,7 +1119,7 @@ export default function DashboardPage() {
         <div
           style={{
             ...actionBar,
-            gridTemplateColumns: tab === "done" ? "1fr 1fr" : "1.3fr 1fr 1fr",
+            gridTemplateColumns: tab === "done" ? "1.6fr 0.8fr" : "1.8fr 0.6fr 0.6fr",
           }}
         >
           <button onClick={openStart} style={actionBtnPrimary} disabled={actionLoading}>
@@ -1419,9 +1670,9 @@ const invBtnBase = {
 
 const invBtnIn = {
   ...invBtnBase,
-  background: "#16a34a",
+  background: "#111827",
   color: "#fff",
-  border: "1px solid #16a34a",
+  border: "1px solid #111827",
 };
 
 const invBtnOut = {
@@ -1433,9 +1684,9 @@ const invBtnOut = {
 
 const invBtnAdjust = {
   ...invBtnBase,
-  background: "#0ea5e9",
-  color: "#fff",
-  border: "1px solid #0ea5e9",
+  background: "#fff",
+  color: "#111827",
+  border: "1px solid #e5e7eb",
 };
 
 const panel = {
@@ -1459,6 +1710,121 @@ const panelTitle = {
   fontSize: 14,
 };
 
+const settingsGrid = {
+  display: "grid",
+  gap: 10,
+};
+
+const settingsLabel = {
+  display: "grid",
+  gap: 6,
+  fontSize: 12,
+  fontWeight: 800,
+  color: "#0f172a",
+};
+
+const settingsInput = {
+  height: 36,
+  padding: "0 10px",
+  borderRadius: 10,
+  border: "1px solid #e5e7eb",
+  background: "#fff",
+  color: "#111827",
+  fontSize: 14,
+};
+
+const settingsTextarea = {
+  minHeight: 72,
+  padding: "8px 10px",
+  borderRadius: 10,
+  border: "1px solid #e5e7eb",
+  background: "#fff",
+  fontSize: 14,
+  resize: "vertical",
+};
+
+const avatarRow = {
+  display: "flex",
+  alignItems: "center",
+  gap: 12,
+};
+
+const avatarPreview = {
+  width: 52,
+  height: 52,
+  borderRadius: "50%",
+  border: "1px solid #e5e7eb",
+  background: "#f8fafc",
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "center",
+  overflow: "hidden",
+};
+
+const avatarImage = {
+  width: "100%",
+  height: "100%",
+  objectFit: "cover",
+};
+
+const avatarPlaceholder = {
+  fontSize: 11,
+  color: "#94a3b8",
+  fontWeight: 700,
+};
+
+const avatarInput = {
+  ...settingsInput,
+  height: 36,
+};
+
+const avatarRemoveBtn = {
+  height: 32,
+  padding: "0 10px",
+  borderRadius: 10,
+  border: "1px solid #e5e7eb",
+  background: "#fff",
+  color: "#475569",
+  fontWeight: 700,
+  fontSize: 12,
+};
+
+const settingsRow = {
+  marginTop: 10,
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "space-between",
+  gap: 10,
+};
+
+const settingsHint = {
+  fontSize: 12,
+  color: "#6b7280",
+  fontWeight: 700,
+};
+
+const settingsBadge = {
+  display: "inline-block",
+  padding: "2px 8px",
+  borderRadius: 999,
+  background: "#e2e8f0",
+  color: "#0f172a",
+  fontSize: 11,
+  fontWeight: 900,
+  marginLeft: 6,
+};
+
+const settingsSaveBtn = {
+  height: 44,
+  padding: "0 18px",
+  borderRadius: 12,
+  border: "1px solid #111827",
+  background: "#111827",
+  color: "#fff",
+  fontWeight: 800,
+  fontSize: 13,
+};
+
 const inventoryRow = {
   display: "flex",
   alignItems: "center",
@@ -1474,15 +1840,18 @@ const inventoryHeader = {
   alignItems: "center",
   justifyContent: "space-between",
   fontSize: 12,
-  fontWeight: 700,
+  fontWeight: 800,
   color: "#475569",
+  lineHeight: "16px",
+  padding: "0 10px",
   marginBottom: 6,
 };
 
 const inventoryTitle = {
   fontWeight: 900,
   color: "#111827",
-  marginBottom: 6,
+  marginBottom: 2,
+  lineHeight: "16px",
 };
 
 const inventoryQty = {
@@ -1501,6 +1870,7 @@ const inventoryGroup = {
   fontSize: 12,
   fontWeight: 800,
   color: "#64748b",
+  padding: "0 10px",
 };
 
 const inventoryGroupLow = {
@@ -1643,12 +2013,19 @@ const chatAvatar = {
   display: "inline-flex",
   alignItems: "center",
   justifyContent: "center",
+  overflow: "hidden",
 };
 
 const chatAvatarSelf = {
   ...chatAvatar,
   background: "#111827",
   color: "#fff",
+};
+
+const chatAvatarImg = {
+  width: "100%",
+  height: "100%",
+  objectFit: "cover",
 };
 
 const chatName = {
@@ -1678,7 +2055,7 @@ const chatTimeRow = {
 const chatReplyBtn = {
   border: "none",
   background: "transparent",
-  color: "#2563eb",
+  color: "#111827",
   fontSize: 11,
   fontWeight: 800,
   cursor: "pointer",
@@ -1929,8 +2306,8 @@ const imageActions = {
 const imageDownloadBtn = {
   height: 36,
   borderRadius: 10,
-  border: "1px solid #16a34a",
-  background: "#16a34a",
+  border: "1px solid #111827",
+  background: "#111827",
   color: "#fff",
   fontWeight: 800,
   padding: "0 12px",
@@ -2101,6 +2478,6 @@ const modalSkipBtn = {
   borderRadius: 10,
   border: "1px solid #e5e7eb",
   background: "#fff",
-  color: "#475569",
+  color: "#111827",
   fontWeight: 700,
 };
