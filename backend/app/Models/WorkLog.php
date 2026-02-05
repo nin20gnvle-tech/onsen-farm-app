@@ -4,6 +4,7 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 use App\Models\User;
 use App\Models\Field;
 use App\Models\TaskType;
@@ -38,24 +39,29 @@ class WorkLog extends Model
 
 
     public function user(): BelongsTo
-{
-    return $this->belongsTo(User::class);
-}
+    {
+        return $this->belongsTo(User::class);
+    }
 
-public function field(): BelongsTo
-{
-    return $this->belongsTo(Field::class);
-}
+    public function field(): BelongsTo
+    {
+        return $this->belongsTo(Field::class);
+    }
 
-public function taskType(): BelongsTo
-{
-    return $this->belongsTo(TaskType::class);
-}
+    public function taskType(): BelongsTo
+    {
+        return $this->belongsTo(TaskType::class);
+    }
 
-public function product(): BelongsTo
-{
-    return $this->belongsTo(Product::class);
-}
+    public function product(): BelongsTo
+    {
+        return $this->belongsTo(Product::class);
+    }
+
+    public function pauseEvents(): HasMany
+    {
+        return $this->hasMany(PauseEvent::class)->orderBy('at');
+    }
 
 }
 
