@@ -2,6 +2,9 @@
 
 namespace Database\Seeders;
 
+use App\Models\Field;
+use App\Models\Product;
+use App\Models\TaskType;
 use App\Models\User;
 use Illuminate\Database\Console\Seeds\WithoutModelEvents;
 use Illuminate\Database\Seeder;
@@ -17,9 +20,21 @@ class DatabaseSeeder extends Seeder
     {
         // User::factory(10)->create();
 
-        User::factory()->create([
-            'name' => 'Test User',
-            'email' => 'test@example.com',
-        ]);
+        User::firstOrCreate(
+            ['email' => 'test@example.com'],
+            ['name' => 'Test User']
+        );
+
+        foreach (['第1圃場', '第2圃場', '第3圃場', '第4圃場'] as $name) {
+            Field::firstOrCreate(['name' => $name]);
+        }
+
+        foreach (['剪定', '収穫', '施肥', '防除'] as $name) {
+            TaskType::firstOrCreate(['name' => $name]);
+        }
+
+        foreach (['いちご', 'みかん', 'ぶどう', 'りんご'] as $name) {
+            Product::firstOrCreate(['name' => $name]);
+        }
     }
 }
