@@ -54,6 +54,7 @@ export default function LoginPage() {
           email: json.user.email ?? "",
           note: "",
           avatar: prevAvatar,
+          userId: json.user.id ?? "",
         };
         window.localStorage.setItem("profile", JSON.stringify(saved));
         if (json.user.role) {

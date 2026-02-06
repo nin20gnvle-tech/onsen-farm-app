@@ -62,7 +62,7 @@ export default function FieldTimeline({ fieldName, logs, dayStart, dayEnd, gridH
 
   return (
     <div style={card}>
-      <div style={{ fontWeight: 900, marginBottom: 10 }}>{fieldName}</div>
+      <div style={{ fontWeight: 900, marginBottom: 10, color: "#111827" }}>{fieldName}</div>
 
       <div style={{ overflowX: "auto", paddingBottom: 4 }}>
         <div style={{ width: W, minWidth: W, position: "relative" }}>

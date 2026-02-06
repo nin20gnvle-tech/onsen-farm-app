@@ -92,6 +92,7 @@ export default function InvitePage() {
           email: form.email,
           note: "",
           avatar: form.avatar || "",
+          userId: json?.user?.id ?? "",
         })
       );
       setSubmitOk("登録が完了しました。ログイン画面へ移動します。");

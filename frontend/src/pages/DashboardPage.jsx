@@ -21,12 +21,15 @@ export default function DashboardPage() {
         email: saved?.email ?? "",
         note: saved?.note ?? "",
         avatar: saved?.avatar ?? "",
+        userId: saved?.userId ?? "",
       };
     } catch {
-      return { name: "", email: "", note: "", avatar: "" };
+      return { name: "", email: "", note: "", avatar: "", userId: "" };
     }
   });
   const [profileSaved, setProfileSaved] = useState(false);
+  const [profileSaving, setProfileSaving] = useState(false);
+  const [profileSaveErr, setProfileSaveErr] = useState("");
   const [passwordRequestStatus, setPasswordRequestStatus] = useState("");
   const [mainTab, setMainTab] = useState("logs"); // logs | inventory | chat | settings
   const dateYmd = useMemo(() => ymd(date), [date]);
@@ -172,10 +175,30 @@ export default function DashboardPage() {
     }
   };
 
-  const handleProfileSave = () => {
+  const handleProfileSave = async () => {
+    setProfileSaveErr("");
+    setProfileSaving(true);
     window.localStorage.setItem("profile", JSON.stringify(profileForm));
-    setProfileSaved(true);
-    window.setTimeout(() => setProfileSaved(false), 1500);
+    try {
+      if (profileForm.userId) {
+        const res = await fetch(`${BASE_URL}/api/users/${profileForm.userId}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json", Accept: "application/json" },
+          body: JSON.stringify({ name: profileForm.name }),
+        });
+        const json = await res.json().catch(() => ({}));
+        if (!res.ok) {
+          throw new Error(json?.message ?? `HTTP ${res.status}`);
+        }
+      }
+      await load();
+      setProfileSaved(true);
+      window.setTimeout(() => setProfileSaved(false), 1500);
+    } catch (e) {
+      setProfileSaveErr(String(e?.message ?? e));
+    } finally {
+      setProfileSaving(false);
+    }
   };
 
   const handleAvatarChange = (file) => {
@@ -1070,12 +1093,13 @@ export default function DashboardPage() {
                   />
                 </label>
               </div>
+              {profileSaveErr && <div style={{ color: "#b91c1c", fontSize: 12, marginBottom: 6 }}>{profileSaveErr}</div>}
               <div style={settingsRow}>
                 <div style={settingsHint}>
                   役割: <span style={settingsBadge}>{role === "admin" ? "管理者" : "作業者"}</span>
                 </div>
-                <button style={settingsSaveBtn} onClick={handleProfileSave}>
-                  {profileSaved ? "保存しました" : "保存"}
+                <button style={settingsSaveBtn} onClick={handleProfileSave} disabled={profileSaving}>
+                  {profileSaving ? "保存中..." : profileSaved ? "保存しました" : "保存"}
                 </button>
               </div>
             </div>
@@ -1132,7 +1156,7 @@ export default function DashboardPage() {
                 style={actionBtnSecondary}
                 disabled={actionLoading || !currentActiveLog}
               >
-                {currentActiveLog?.status === "paused" ? "再開" : "停止"}
+                {currentActiveLog?.status === "paused" ? "再開" : "中断"}
               </button>
               <button onClick={handleStop} style={actionBtnDanger} disabled={actionLoading || !currentActiveLog}>
                 完了

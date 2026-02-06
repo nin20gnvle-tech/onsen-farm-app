@@ -5,6 +5,7 @@ use App\Http\Controllers\Api\AuthController;
 use App\Http\Controllers\Api\InviteController;
 use App\Http\Controllers\Api\MasterDataController;
 use App\Http\Controllers\Api\WorkLogController;
+use App\Http\Controllers\Api\UserController;
 
 
 Route::get('/masters', [MasterDataController::class, 'index']);
@@ -28,6 +29,7 @@ Route::get('/invites/{token}', [InviteController::class, 'show']);
 Route::post('/invites', [InviteController::class, 'store']);
 Route::post('/register', [AuthController::class, 'register']);
 Route::post('/login', [AuthController::class, 'login']);
+Route::patch('/users/{user}', [UserController::class, 'update']);
 
 
 
