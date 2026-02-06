@@ -71,8 +71,7 @@ class DatabaseSeeder extends Seeder
         $locations = [
             ['name' => 'バナナ庫', 'type' => 'room'],
             ['name' => '外気温', 'type' => 'outdoor'],
-            ['name' => '2連右棟', 'type' => 'field'],
-            ['name' => '2連左棟', 'type' => 'field'],
+            ['name' => '2連棟', 'type' => 'field'],
             ['name' => '3連右棟', 'type' => 'field'],
             ['name' => '3連中棟', 'type' => 'field'],
             ['name' => '3連左棟', 'type' => 'field'],

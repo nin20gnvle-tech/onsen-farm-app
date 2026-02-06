@@ -129,8 +129,7 @@ export default function DashboardPage() {
   const defaultTempLocations = [
     "バナナ庫",
     "外気温",
-    "2連右棟",
-    "2連左棟",
+    "2連棟",
     "3連右棟",
     "3連中棟",
     "3連左棟",
@@ -2272,6 +2271,7 @@ const tempTimeTabRow = {
   ...tempTabRow,
   marginTop: 4,
 };
+
 
 const tempDateRow = {
   display: "flex",
