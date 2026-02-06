@@ -31,8 +31,36 @@ export default function DashboardPage() {
   const [profileSaving, setProfileSaving] = useState(false);
   const [profileSaveErr, setProfileSaveErr] = useState("");
   const [passwordRequestStatus, setPasswordRequestStatus] = useState("");
-  const [mainTab, setMainTab] = useState("logs"); // logs | inventory | chat | settings
+  const [mainTab, setMainTab] = useState("logs"); // logs | inventory | daily | temperature | invite | settings
   const dateYmd = useMemo(() => ymd(date), [date]);
+  const weekdayLabel = useMemo(() => {
+    const d = new Date(`${dateYmd}T00:00:00`);
+    const labels = ["日", "月", "火", "水", "木", "金", "土"];
+    return Number.isNaN(d.getTime()) ? "" : labels[d.getDay()];
+  }, [dateYmd]);
+  const dateWithWeekday = weekdayLabel ? `${dateYmd} (${weekdayLabel})` : dateYmd;
+  const dateDisplay = useMemo(() => {
+    const d = new Date(`${dateYmd}T00:00:00`);
+    if (Number.isNaN(d.getTime())) return dateWithWeekday;
+    return `${d.getFullYear()}年 ${d.getMonth() + 1}月 ${d.getDate()}日 (${weekdayLabel})`;
+  }, [dateYmd, dateWithWeekday, weekdayLabel]);
+  const monthDays = useMemo(() => {
+    const d = new Date(`${dateYmd}T00:00:00`);
+    if (Number.isNaN(d.getTime())) return [];
+    const year = d.getFullYear();
+    const month = d.getMonth();
+    const last = new Date(year, month + 1, 0).getDate();
+    const labels = ["日", "月", "火", "水", "木", "金", "土"];
+    return Array.from({ length: last }, (_, i) => {
+      const day = i + 1;
+      const current = new Date(year, month, day);
+      return {
+        dateKey: ymd(current),
+        label: `${day}日 (${labels[current.getDay()]})`,
+      };
+    });
+  }, [dateYmd]);
+  const tempMonthKey = useMemo(() => dateYmd.slice(0, 7), [dateYmd]);
 
   const [tab, setTab] = useState("active"); // active | done
   const [data, setData] = useState(null);
@@ -78,6 +106,35 @@ export default function DashboardPage() {
   const [stockOutErr, setStockOutErr] = useState("");
   const [stockOutLoading, setStockOutLoading] = useState(false);
   const [stockAdjustOpen, setStockAdjustOpen] = useState(false);
+  const [dailyWeather, setDailyWeather] = useState("");
+  const [dailyNote, setDailyNote] = useState("");
+  const [dailyAttendance, setDailyAttendance] = useState("");
+  const [dailyWorkContent, setDailyWorkContent] = useState("");
+  const [dailyAttendanceTouched, setDailyAttendanceTouched] = useState(false);
+  const [dailyWorkContentTouched, setDailyWorkContentTouched] = useState(false);
+  const [dailySaving, setDailySaving] = useState(false);
+  const [dailySaveMsg, setDailySaveMsg] = useState("");
+  const [tempSaving, setTempSaving] = useState(false);
+  const [tempSaveMsg, setTempSaveMsg] = useState("");
+  const defaultTempLocations = [
+    "バナナ庫",
+    "外気温",
+    "2連右棟",
+    "2連左棟",
+    "3連右棟",
+    "3連中棟",
+    "3連左棟",
+    "単連",
+  ];
+  const [tempLocations, setTempLocations] = useState(
+    defaultTempLocations.map((name, index) => ({ id: null, name, sort_order: index }))
+  );
+  const tempLocationNames = useMemo(() => tempLocations.map((location) => location.name), [tempLocations]);
+  const tempTimes = ["08:00", "12:00", "17:00"];
+  const [tempLocationTab, setTempLocationTab] = useState(defaultTempLocations[0]);
+  const [tempInputs, setTempInputs] = useState(() =>
+    Object.fromEntries(defaultTempLocations.map((name) => [name, {}]))
+  );
   const [stockAdjustForm, setStockAdjustForm] = useState({ item_id: "", quantity: "" });
   const [stockAdjustErr, setStockAdjustErr] = useState("");
   const [stockAdjustLoading, setStockAdjustLoading] = useState(false);
@@ -101,6 +158,29 @@ export default function DashboardPage() {
       setLoading(false);
     }
   };
+
+  useEffect(() => {
+    const loadTempLocations = async () => {
+      try {
+        const res = await fetch(`${BASE_URL}/api/temperature-locations`, {
+          headers: { Accept: "application/json" },
+        });
+        const json = await res.json();
+        if (!res.ok) throw new Error(json?.message ?? `HTTP ${res.status}`);
+        const locations = Array.isArray(json?.locations) ? json.locations : [];
+        if (locations.length > 0) {
+          setTempLocations(locations);
+          setTempLocationTab((prev) =>
+            prev && locations.some((loc) => loc.name === prev) ? prev : locations[0].name
+          );
+        }
+      } catch {
+        // keep default locations when API is unavailable
+      }
+    };
+
+    loadTempLocations();
+  }, []);
 
   const handleChatSend = () => {
     const text = chatInput.trim();
@@ -525,6 +605,138 @@ export default function DashboardPage() {
   const currentActiveLog = runningLog ?? pausedLog ?? null;
   const currentDoneLog = doneLogs[0] ?? null;
 
+  const dailySummary = useMemo(() => {
+    const allLogs = [...activeLogs, ...doneLogs];
+    const members = Array.from(new Set(allLogs.map((log) => log.user?.name).filter(Boolean)));
+    const tasks = Array.from(new Set(allLogs.map((log) => log.task_type?.name).filter(Boolean)));
+    const workLines = allLogs.map((log) => ({
+      field: log.field?.name ?? "圃場",
+      task: log.task_type?.name ?? "作業",
+      user: log.user?.name ?? "作業者",
+    }));
+    return { members, tasks, workLines };
+  }, [activeLogs, doneLogs]);
+  const workContentText = useMemo(() => {
+    if (dailySummary.workLines.length === 0) return "";
+    return dailySummary.workLines.map((line) => `・${line.field} ${line.task}（${line.user}）`).join("\n");
+  }, [dailySummary.workLines]);
+  useEffect(() => {
+    if (!dailyAttendanceTouched) {
+      setDailyAttendance(dailySummary.members.join("・"));
+    }
+    if (!dailyWorkContentTouched) {
+      setDailyWorkContent(workContentText);
+    }
+  }, [dailySummary.members, dailyAttendanceTouched, dailyWorkContentTouched, workContentText]);
+  useEffect(() => {
+    let cancelled = false;
+
+    const resetDaily = () => {
+      setDailyWeather("");
+      setDailyNote("");
+      setDailyAttendanceTouched(false);
+      setDailyWorkContentTouched(false);
+    };
+
+    const loadDailyReport = async () => {
+      try {
+        const res = await fetch(`${BASE_URL}/api/daily-reports?date=${dateYmd}`, {
+          headers: { Accept: "application/json" },
+        });
+        const json = await res.json();
+        if (!res.ok) throw new Error(json?.message ?? `HTTP ${res.status}`);
+
+        if (cancelled) return;
+
+        if (json?.report) {
+          setDailyWeather(json.report.weather ?? "");
+          setDailyNote(json.report.note ?? "");
+          setDailyAttendance(json.report.attendance ?? "");
+          setDailyWorkContent(json.report.work_content ?? "");
+          setDailyAttendanceTouched(true);
+          setDailyWorkContentTouched(true);
+        } else {
+          resetDaily();
+        }
+      } catch {
+        if (!cancelled) {
+          resetDaily();
+          setDailySaveMsg("読み込みに失敗しました");
+        }
+      }
+    };
+
+    loadDailyReport();
+    setDailySaveMsg("");
+
+    return () => {
+      cancelled = true;
+    };
+  }, [dateYmd]);
+  useEffect(() => {
+    let cancelled = false;
+
+    const splitDateTime = (value) => {
+      const text = String(value ?? "");
+      if (!text) return { dateKey: "", timeKey: "" };
+      const [datePart, timePart] = text.includes("T") ? text.split("T") : text.split(" ");
+      if (!datePart || !timePart) return { dateKey: "", timeKey: "" };
+      return { dateKey: datePart, timeKey: timePart.slice(0, 5) };
+    };
+
+    const locationNames = tempLocationNames;
+    const blankInputs = Object.fromEntries(locationNames.map((name) => [name, {}]));
+    setTempInputs(blankInputs);
+    setTempSaveMsg("");
+
+    const loadTemperature = async () => {
+      if (tempLocations.length === 0) return;
+      try {
+        const results = await Promise.all(
+          tempLocations.map(async (location) => {
+            if (!location.id) return { name: location.name, readings: [] };
+            const res = await fetch(
+              `${BASE_URL}/api/temperature-readings?location_id=${location.id}&month=${tempMonthKey}`,
+              { headers: { Accept: "application/json" } }
+            );
+            const json = await res.json();
+            if (!res.ok) throw new Error(json?.message ?? `HTTP ${res.status}`);
+            return {
+              name: location.name,
+              readings: Array.isArray(json?.readings) ? json.readings : [],
+            };
+          })
+        );
+
+        if (cancelled) return;
+
+        const nextInputs = Object.fromEntries(locationNames.map((name) => [name, {}]));
+        results.forEach(({ name, readings }) => {
+          if (!Array.isArray(readings)) return;
+          readings.forEach((row) => {
+            const { dateKey, timeKey } = splitDateTime(row.measured_at);
+            if (!dateKey || !timeKey) return;
+            if (!nextInputs[name][dateKey]) nextInputs[name][dateKey] = {};
+            nextInputs[name][dateKey][timeKey] = {
+              temp: row.temperature ?? "",
+              humidity: row.humidity ?? "",
+            };
+          });
+        });
+
+        setTempInputs(nextInputs);
+      } catch {
+        if (!cancelled) setTempSaveMsg("読み込みに失敗しました");
+      }
+    };
+
+    loadTemperature();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [tempMonthKey, tempLocations, tempLocationNames]);
+
   // タイムライン範囲（06:00〜18:00）
   const DAY_START = 6 * 60;
   const DAY_END = 18 * 60;
@@ -537,6 +749,160 @@ export default function DashboardPage() {
     const d = new Date();
     return d.getHours() * 60 + d.getMinutes();
   })();
+
+  const handleDailyDownload = () => {
+    const escapeHtml = (value) =>
+      String(value ?? "")
+        .replaceAll("&", "&amp;")
+        .replaceAll("<", "&lt;")
+        .replaceAll(">", "&gt;")
+        .replaceAll('"', "&quot;")
+        .replaceAll("'", "&#39;");
+
+    const membersText = dailyAttendance ? dailyAttendance : "該当なし";
+    const workContentValue = dailyWorkContent ? dailyWorkContent : "該当なし";
+
+    const win = window.open("", "_blank");
+    if (!win) return;
+
+    win.document.open();
+    win.document.write(`<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <title>日報 ${escapeHtml(dateDisplay)}</title>
+  <style>
+    body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; padding: 24px; color: #111827; }
+    h1 { font-size: 18px; margin: 0 0 12px; }
+    .section { margin-bottom: 16px; }
+    .label { font-weight: 700; margin-bottom: 6px; }
+    .box { border: 1px solid #e5e7eb; border-radius: 10px; padding: 10px 12px; background: #fff; }
+    ul { margin: 6px 0 0 18px; padding: 0; }
+    li { margin: 2px 0; }
+    .note { white-space: pre-wrap; }
+  </style>
+</head>
+<body>
+  <h1>日報（${escapeHtml(dateDisplay)}）</h1>
+  <div class="section">
+    <div class="label">今日の日付</div>
+    <div class="box">${escapeHtml(dateDisplay)}</div>
+  </div>
+  <div class="section">
+    <div class="label">今日の天気</div>
+    <div class="box">${escapeHtml(dailyWeather || "未入力")}</div>
+  </div>
+  <div class="section">
+    <div class="label">今日の出勤メンバー</div>
+    <div class="box">${escapeHtml(membersText)}</div>
+  </div>
+  <div class="section">
+    <div class="label">作業内容</div>
+    <div class="box note">${escapeHtml(workContentValue)}</div>
+  </div>
+  <div class="section">
+    <div class="label">報連相</div>
+    <div class="box note">${escapeHtml(dailyNote || "未入力")}</div>
+  </div>
+</body>
+</html>`);
+    win.document.close();
+    win.focus();
+    win.print();
+  };
+
+  const handleDailySave = async () => {
+    setDailySaving(true);
+    setDailySaveMsg("");
+    try {
+      const res = await fetch(`${BASE_URL}/api/daily-reports`, {
+        method: "POST",
+        headers: { Accept: "application/json", "Content-Type": "application/json" },
+        body: JSON.stringify({
+          date: dateYmd,
+          weather: dailyWeather,
+          attendance: dailyAttendance,
+          work_content: dailyWorkContent,
+          note: dailyNote,
+          created_by_user_id: profileForm.userId || null,
+        }),
+      });
+      const json = await res.json();
+      if (!res.ok) throw new Error(json?.message ?? `HTTP ${res.status}`);
+
+      setDailySaveMsg("保存しました");
+      window.setTimeout(() => setDailySaveMsg(""), 1500);
+    } catch {
+      setDailySaveMsg("保存に失敗しました");
+    } finally {
+      setDailySaving(false);
+    }
+  };
+
+  const handleTempSave = async () => {
+    const toNumberOrNull = (value) => {
+      if (value === "" || value === null || value === undefined) return null;
+      const num = Number(value);
+      return Number.isNaN(num) ? null : num;
+    };
+
+    setTempSaving(true);
+    setTempSaveMsg("");
+    try {
+      const tasks = tempLocations.map(async (location) => {
+        if (!location.id) return;
+        const locationData = tempInputs[location.name] ?? {};
+        const readings = [];
+
+        Object.entries(locationData).forEach(([dateKey, times]) => {
+          Object.entries(times ?? {}).forEach(([timeKey, entry]) => {
+            readings.push({
+              measured_at: `${dateKey}T${timeKey}:00`,
+              temperature: toNumberOrNull(entry?.temp),
+              humidity: toNumberOrNull(entry?.humidity),
+            });
+          });
+        });
+
+        const res = await fetch(`${BASE_URL}/api/temperature-readings/batch`, {
+          method: "POST",
+          headers: { Accept: "application/json", "Content-Type": "application/json" },
+          body: JSON.stringify({
+            location_id: location.id,
+            readings,
+          }),
+        });
+        const json = await res.json();
+        if (!res.ok) throw new Error(json?.message ?? `HTTP ${res.status}`);
+      });
+
+      await Promise.all(tasks);
+      setTempSaveMsg("保存しました");
+      window.setTimeout(() => setTempSaveMsg(""), 1500);
+    } catch {
+      setTempSaveMsg("保存に失敗しました");
+    } finally {
+      setTempSaving(false);
+    }
+  };
+
+  const updateTempInput = (location, dateKey, timeKey, field, value) => {
+    setTempInputs((prev) => {
+      const locationData = prev[location] ?? {};
+      const dayData = locationData[dateKey] ?? {};
+      const entry = dayData[timeKey] ?? { temp: "", humidity: "" };
+      return {
+        ...prev,
+        [location]: {
+          ...locationData,
+          [dateKey]: {
+            ...dayData,
+            [timeKey]: { ...entry, [field]: value },
+          },
+        },
+      };
+    });
+  };
 
   const callWorkLogAction = async (log, action, extraBody = {}) => {
     if (!log?.id || !log?.user?.id) {
@@ -626,11 +992,29 @@ export default function DashboardPage() {
     callWorkLogAction(currentDoneLog, "undo");
   };
 
+  const renderSectionTitle = (text) => (
+    <div style={sectionTitleRow}>
+      <div style={sectionTitleTab}>{text}</div>
+      <div style={sectionTitleLine} />
+    </div>
+  );
+
   return (
     <div style={{ minHeight: "100vh", background: "#f8fafc", paddingBottom: 144 }}>
+      <div style={topBar}>
+        <div style={topBarInner}>
+          <div style={topLogo}>farm-app</div>
+          <button
+            onClick={() => setMainTab("settings")}
+            style={{ ...topSettingsBtn, ...(mainTab === "settings" ? topSettingsBtnActive : null) }}
+          >
+            設定
+          </button>
+        </div>
+      </div>
       {/* Header */}
       {mainTab === "logs" && (
-        <div style={{ position: "sticky", top: 0, zIndex: 10, background: "#fff", borderBottom: "1px solid #e5e7eb" }}>
+        <div style={{ position: "sticky", top: 52, zIndex: 10, background: "#fff", borderBottom: "1px solid #e5e7eb" }}>
           <div style={{ padding: 12, display: "flex", alignItems: "center", gap: 10, maxWidth: 560, margin: "0 auto" }}>
             <button onClick={() => setDate(new Date(date.getTime() - 86400000))} style={dateBtn}>
               ◀ 前日
@@ -701,10 +1085,9 @@ export default function DashboardPage() {
         )}
 
         {mainTab === "inventory" && (
-          <>
-            <div style={{ fontWeight: 900, fontSize: 16 }}>在庫</div>
-            <div style={panel}>
-              <div style={{ fontWeight: 800, marginBottom: 6 }}>在庫品目</div>
+          <div style={sectionBlock}>
+            {renderSectionTitle("在庫")}
+            <div style={panelWithTab}>
               {inventoryErr && <div style={{ color: "#b91c1c", fontSize: 12 }}>{inventoryErr}</div>}
               {inventoryLoading && <div style={{ color: "#6b7280", fontSize: 12 }}>読み込み中...</div>}
               {!inventoryLoading && inventoryItems.length === 0 && (
@@ -808,7 +1191,7 @@ export default function DashboardPage() {
                 </div>
               )}
             </div>
-          </>
+          </div>
         )}
 
         {chatImagePreview && (
@@ -831,203 +1214,251 @@ export default function DashboardPage() {
           </div>
         )}
 
-        {mainTab === "chat" && (
-          <>
-            <div style={{ fontWeight: 900, fontSize: 16, color: "#0f172a" }}>チャット</div>
-            <div style={chatPanel}>
-              <div style={chatList}>
-                {chatMessages.map((msg) => (
-                  <div key={msg.id} style={msg.isSelf ? chatRowSelf : chatRow}>
-                    <div style={msg.isSelf ? chatHeaderSelf : chatHeader}>
-                      <div style={msg.isSelf ? chatAvatarSelf : chatAvatar}>
-                        {msg.avatar ? (
-                          <img src={msg.avatar} alt={msg.user || "アイコン"} style={chatAvatarImg} />
-                        ) : (
-                          (msg.user ?? "?").slice(0, 1)
-                        )}
-                      </div>
-                      <div style={chatName}>{msg.user}</div>
-                    </div>
-                    <div style={msg.isSelf ? chatBubbleSelf : chatBubble}>
-                      {msg.replyTo && (
-                        <div style={chatReplyBadge}>
-                          <div style={chatReplyLabel}>返信先</div>
-                          <div style={chatReplyText}>
-                            {msg.replyTo.user}: {msg.replyTo.text || (msg.replyTo.files?.length ? "添付ファイル" : "")}
-                          </div>
-                        </div>
-                      )}
-                      {msg.text && <div style={chatText}>{msg.text}</div>}
-                      {msg.files?.length > 0 && (
-                        <div style={chatMediaList}>
-                          {msg.files.map((file) => (
-                            <div key={file.id} style={chatMediaItem}>
-                              {file.type?.startsWith("image/") ? (
-                                <button
-                                  style={chatImageBtn}
-                                  onClick={() => setChatImagePreview({ url: file.url, name: file.name })}
-                                >
-                                  <img src={file.url} alt={file.name} style={chatImage} />
-                                </button>
-                              ) : file.type?.startsWith("video/") ? (
-                                <video src={file.url} controls style={chatVideo} />
-                              ) : (
-                                <div style={chatFileBadge}>{file.name}</div>
-                              )}
-                            </div>
-                          ))}
-                        </div>
-                      )}
-                    </div>
-                    <div style={chatTimeRow}>
-                      <div style={chatTime}>{msg.time}</div>
-                      <button
-                        style={chatReplyBtn}
-                        onClick={() =>
-                          setChatReplyTo({
-                            id: msg.id,
-                            user: msg.user,
-                            text: msg.text ?? "",
-                            files: msg.files ?? [],
-                          })
-                        }
-                      >
-                        返信
-                      </button>
+        {mainTab === "daily" && (
+          <div style={sectionBlock}>
+            {renderSectionTitle("日報作成")}
+            <div style={panelWithTab}>
+              <div style={dailySheet}>
+                <div style={dailyHeaderRow}>
+                  <div style={dailyDateBlock}>
+                    <div style={dailyDateInputRow}>
+                      <input
+                        type="date"
+                        value={dateYmd}
+                        onChange={(e) => {
+                          if (!e.target.value) return;
+                          setDate(new Date(`${e.target.value}T00:00:00`));
+                        }}
+                        onFocus={(e) => {
+                          if (e.target.showPicker) e.target.showPicker();
+                        }}
+                        style={dailyDateInput}
+                        aria-label="日報の日付"
+                      />
+                      <div style={dailyDateWeekday}>({weekdayLabel})</div>
                     </div>
                   </div>
-                ))}
-              </div>
-              <div style={chatComposer}>
-                <div style={chatInputRow}>
-                  <input
-                    style={chatInputStyle}
-                    value={chatInput}
-                    onChange={(e) => setChatInput(e.target.value)}
-                    placeholder="メッセージを入力"
-                    onKeyDown={(e) => {
-                      if (e.key === "Enter") {
-                        e.preventDefault();
-                        handleChatSend();
-                      }
-                    }}
-                  />
-                  <label style={chatAttachBtn} title="添付">
-                    <span style={chatAttachIcon} aria-hidden="true">
-                      📎
-                    </span>
+                  <div style={dailyWeatherRow}>
+                    <span style={dailyLabel}>天気:</span>
                     <input
-                      type="file"
-                      accept="image/*,video/*"
-                      multiple
-                      style={{ display: "none" }}
-                      onChange={(e) => {
-                        const files = Array.from(e.target.files ?? []);
-                        if (files.length > 0) {
-                          setChatFiles((prev) => [...prev, ...files]);
-                        }
-                        e.target.value = "";
-                      }}
+                      type="text"
+                      value={dailyWeather}
+                      onChange={(e) => setDailyWeather(e.target.value)}
+                      style={dailyInlineInput}
+                      placeholder="晴れ"
                     />
-                  </label>
-                  <label style={chatCameraBtn} title="カメラ">
-                    <span style={chatCameraIcon} aria-hidden="true">
-                      📷
-                    </span>
-                    <input
-                      type="file"
-                      accept="image/*"
-                      capture="environment"
-                      style={{ display: "none" }}
-                      onChange={(e) => {
-                        const files = Array.from(e.target.files ?? []);
-                        if (files.length > 0) {
-                          setChatFiles((prev) => [...prev, ...files]);
-                        }
-                        e.target.value = "";
-                      }}
-                    />
-                  </label>
-                  <button style={chatSendBtn} onClick={handleChatSend} title="送信" aria-label="送信">
-                    <span style={chatSendIcon} aria-hidden="true">
-                      📤
-                    </span>
-                  </button>
+                  </div>
                 </div>
-                {chatReplyTo && (
-                  <div style={chatReplyPreview}>
-                    <div style={chatReplyPreviewLabel}>返信先</div>
-                    <div style={chatReplyPreviewText}>
-                      {chatReplyTo.user}: {chatReplyTo.text || (chatReplyTo.files?.length ? "添付ファイル" : "")}
-                    </div>
-                    <button style={chatReplyCancel} onClick={() => setChatReplyTo(null)}>
-                      取消
+                <div style={dailyAttendanceRow}>
+                  <span style={dailyLabel}>出勤:</span>
+                  <input
+                    type="text"
+                    value={dailyAttendance}
+                    onChange={(e) => {
+                      setDailyAttendanceTouched(true);
+                      setDailyAttendance(e.target.value);
+                    }}
+                    style={dailyAttendanceInput}
+                    placeholder="出勤メンバーを入力"
+                  />
+                </div>
+                <div style={dailyBox}>
+                  <div style={dailyBoxTitle}>作業内容</div>
+                  <textarea
+                    value={dailyWorkContent}
+                    onChange={(e) => {
+                      setDailyWorkContentTouched(true);
+                      setDailyWorkContent(e.target.value);
+                    }}
+                    style={{ ...dailyRuledTextarea, minHeight: 260 }}
+                    placeholder="作業内容を入力"
+                  />
+                </div>
+                <div style={dailyBox}>
+                  <div style={dailyBoxTitle}>報・連・相</div>
+                  <textarea
+                    value={dailyNote}
+                    onChange={(e) => setDailyNote(e.target.value)}
+                    style={{ ...dailyRuledTextarea, minHeight: 160 }}
+                    placeholder="共有事項を入力"
+                  />
+                </div>
+                <div style={settingsRow}>
+                  <div style={{ color: "#6b7280", fontSize: 12 }}>
+                    {dailySaveMsg || "PDFはブラウザの印刷機能で保存します。"}
+                  </div>
+                  <div style={{ display: "flex", gap: 8 }}>
+                    <button style={settingsSaveBtn} onClick={handleDailySave} disabled={dailySaving}>
+                      {dailySaving ? "保存中..." : "保存"}
+                    </button>
+                    <button style={settingsSaveBtn} onClick={handleDailyDownload}>
+                      PDFダウンロード
                     </button>
                   </div>
-                )}
-                {chatFiles.length > 0 && (
-                  <div style={chatPreviewList}>
-                    {chatFiles.map((file, idx) => (
-                      <div key={`${file.name}-${idx}`} style={chatPreviewItem}>
-                        <div style={chatPreviewName}>{file.name}</div>
-                        <button
-                          style={chatPreviewRemove}
-                          onClick={() => setChatFiles((prev) => prev.filter((_, i) => i !== idx))}
-                        >
-                          削除
-                        </button>
-                      </div>
-                    ))}
-                  </div>
-                )}
+                </div>
               </div>
             </div>
-          </>
+          </div>
+        )}
+
+        {mainTab === "temperature" && (
+          <div style={sectionBlock}>
+            {renderSectionTitle("温度計測")}
+            <div style={panelWithTab}>
+              <div style={{ display: "grid", gap: 12 }}>
+                <div style={{ color: "#6b7280", fontSize: 13 }}>
+                  計測時刻は 8:00 / 12:00 / 17:00 です。場所タブを切り替えて入力してください。
+                </div>
+                <div style={tempDateRow}>
+                  <span style={tempDateLabel}>対象日</span>
+                  <input
+                    type="date"
+                    value={dateYmd}
+                    onChange={(e) => {
+                      if (!e.target.value) return;
+                      setDate(new Date(`${e.target.value}T00:00:00`));
+                    }}
+                    onFocus={(e) => {
+                      if (e.target.showPicker) e.target.showPicker();
+                    }}
+                    style={tempDateInput}
+                  />
+                  <div style={tempDateWeekday}>({weekdayLabel})</div>
+                </div>
+                <div style={tempTabRow}>
+                  {tempLocations.map((location) => (
+                    <button
+                      key={location.id ?? location.name}
+                      type="button"
+                      onClick={() => setTempLocationTab(location.name)}
+                      style={{
+                        ...tempTabBtn,
+                        ...(tempLocationTab === location.name ? tempTabBtnActive : null),
+                      }}
+                    >
+                      {location.name}
+                    </button>
+                  ))}
+                </div>
+                <div style={tempTableWrap}>
+                  <div style={tempTable}>
+                    <div
+                      style={{
+                        ...tempTableHeader,
+                        gridTemplateColumns: `120px repeat(${tempTimes.length}, 1fr)`,
+                      }}
+                    >
+                      <div style={tempCornerCell}>日付</div>
+                      {tempTimes.map((time) => (
+                        <div key={time} style={tempTimeHeader}>
+                          <div style={tempTimeLabel}>{time}</div>
+                          <div style={tempSubHeader}>
+                            <span>温度</span>
+                            <span>湿度</span>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                    {monthDays.map((day) => {
+                      const dayData = tempInputs[tempLocationTab]?.[day.dateKey] ?? {};
+                      return (
+                        <div
+                          key={day.dateKey}
+                          style={{
+                            ...tempTableRow,
+                            gridTemplateColumns: `120px repeat(${tempTimes.length}, 1fr)`,
+                          }}
+                        >
+                          <div style={tempDateCell}>{day.label}</div>
+                          {tempTimes.map((time) => {
+                            const entry = dayData[time] ?? { temp: "", humidity: "" };
+                            return (
+                              <div key={`${day.dateKey}-${time}`} style={tempValueCell}>
+                                <input
+                                  type="text"
+                                  value={entry.temp}
+                                  onChange={(e) =>
+                                    updateTempInput(tempLocationTab, day.dateKey, time, "temp", e.target.value)
+                                  }
+                                  style={tempCellInput}
+                                  placeholder="温度"
+                                />
+                                <input
+                                  type="text"
+                                  value={entry.humidity}
+                                  onChange={(e) =>
+                                    updateTempInput(tempLocationTab, day.dateKey, time, "humidity", e.target.value)
+                                  }
+                                  style={tempCellInput}
+                                  placeholder="湿度"
+                                />
+                              </div>
+                            );
+                          })}
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+                <div style={settingsRow}>
+                  <div style={{ color: "#6b7280", fontSize: 12 }}>
+                    {tempSaveMsg || "保存ボタンで月ごとの入力内容を保存します。"}
+                  </div>
+                  <button style={settingsSaveBtn} onClick={handleTempSave} disabled={tempSaving}>
+                    {tempSaving ? "保存中..." : "保存"}
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {mainTab === "invite" && role === "admin" && (
+          <div style={sectionBlock}>
+            {renderSectionTitle("招待")}
+            <div style={panelWithTab}>
+              <div style={{ color: "#6b7280", fontSize: 13, marginBottom: 8 }}>
+                招待リンクを作成して作業者/管理者を追加します。
+              </div>
+              <div style={settingsGrid}>
+                <label style={settingsLabel}>
+                  権限
+                  <select
+                    value={inviteRole}
+                    onChange={(e) => setInviteRole(e.target.value)}
+                    style={settingsInput}
+                  >
+                    <option value="worker">作業者</option>
+                    <option value="admin">管理者</option>
+                  </select>
+                </label>
+              </div>
+              {inviteErr && <div style={{ color: "#b91c1c", fontSize: 12, marginTop: 8 }}>{inviteErr}</div>}
+              {inviteResult?.inviteUrl && (
+                <div style={{ marginTop: 10 }}>
+                  <div style={{ color: "#6b7280", fontSize: 12, marginBottom: 4 }}>招待URL</div>
+                  <div style={{ display: "grid", gap: 6 }}>
+                    <input value={inviteResult.inviteUrl} readOnly style={settingsInput} />
+                    <button style={settingsSaveBtn} onClick={handleInviteCopy}>
+                      {inviteResult.copied ? "コピーしました" : "コピー"}
+                    </button>
+                  </div>
+                </div>
+              )}
+              <div style={settingsRow}>
+                <div style={{ color: "#6b7280", fontSize: 12 }} />
+                <button style={settingsSaveBtn} onClick={handleInviteCreate} disabled={inviteLoading}>
+                  {inviteLoading ? "作成中..." : "招待リンクを作成"}
+                </button>
+              </div>
+            </div>
+          </div>
         )}
 
         {mainTab === "settings" && (
-          <>
-            <div style={{ fontWeight: 900, fontSize: 16 }}>会員情報・設定</div>
-            {role === "admin" && (
-              <div style={panel}>
-                <div style={panelTitle}>招待</div>
-                <div style={{ color: "#6b7280", fontSize: 13, marginBottom: 8 }}>
-                  招待リンクを作成して作業者/管理者を追加します。
-                </div>
-                <div style={settingsGrid}>
-                  <label style={settingsLabel}>
-                    権限
-                    <select
-                      value={inviteRole}
-                      onChange={(e) => setInviteRole(e.target.value)}
-                      style={settingsInput}
-                    >
-                      <option value="worker">作業者</option>
-                      <option value="admin">管理者</option>
-                    </select>
-                  </label>
-                </div>
-                {inviteErr && <div style={{ color: "#b91c1c", fontSize: 12, marginTop: 8 }}>{inviteErr}</div>}
-                {inviteResult?.inviteUrl && (
-                  <div style={{ marginTop: 10 }}>
-                    <div style={{ color: "#6b7280", fontSize: 12, marginBottom: 4 }}>招待URL</div>
-                    <div style={{ display: "grid", gap: 6 }}>
-                      <input value={inviteResult.inviteUrl} readOnly style={settingsInput} />
-                      <button style={settingsSaveBtn} onClick={handleInviteCopy}>
-                        {inviteResult.copied ? "コピーしました" : "コピー"}
-                      </button>
-                    </div>
-                  </div>
-                )}
-                <div style={settingsRow}>
-                  <div style={{ color: "#6b7280", fontSize: 12 }} />
-                  <button style={settingsSaveBtn} onClick={handleInviteCreate} disabled={inviteLoading}>
-                    {inviteLoading ? "作成中..." : "招待リンクを作成"}
-                  </button>
-                </div>
-              </div>
-            )}
-            <div style={panel}>
+          <div style={sectionBlock}>
+            {renderSectionTitle("会員情報")}
+            <div style={panelWithTab}>
               <div style={panelTitle}>基本情報</div>
               <div style={settingsGrid}>
                 <label style={settingsLabel}>
@@ -1134,7 +1565,7 @@ export default function DashboardPage() {
                 </button>
               </div>
             </div>
-          </>
+          </div>
         )}
       </div>
 
@@ -1534,7 +1965,12 @@ export default function DashboardPage() {
       )}
 
       {/* Bottom Tabs */}
-      <div style={bottomTabs}>
+      <div
+        style={{
+          ...bottomTabs,
+          gridTemplateColumns: `repeat(${role === "admin" ? 5 : 4}, 1fr)`,
+        }}
+      >
         <button onClick={() => setMainTab("logs")} style={{ ...bottomTabBtn, ...(mainTab === "logs" ? bottomTabActive : null) }}>
           <span style={bottomTabIcon}>🗒️</span>
           作業ログ
@@ -1547,19 +1983,28 @@ export default function DashboardPage() {
           在庫
         </button>
         <button
-          onClick={() => setMainTab("chat")}
-          style={{ ...bottomTabBtn, ...bottomTabDivider, ...(mainTab === "chat" ? bottomTabActive : null) }}
+          onClick={() => setMainTab("daily")}
+          style={{ ...bottomTabBtn, ...bottomTabDivider, ...(mainTab === "daily" ? bottomTabActive : null) }}
         >
-          <span style={bottomTabIcon}>💬</span>
-          チャット
+          <span style={bottomTabIcon}>📝</span>
+          日報作成
         </button>
         <button
-          onClick={() => setMainTab("settings")}
-          style={{ ...bottomTabBtn, ...bottomTabDivider, ...(mainTab === "settings" ? bottomTabActive : null) }}
+          onClick={() => setMainTab("temperature")}
+          style={{ ...bottomTabBtn, ...bottomTabDivider, ...(mainTab === "temperature" ? bottomTabActive : null) }}
         >
-          <span style={bottomTabIcon}>⚙️</span>
-          {role === "admin" ? "招待" : "会員情報"}
+          <span style={bottomTabIcon}>🌡️</span>
+          温度計測
         </button>
+        {role === "admin" && (
+          <button
+            onClick={() => setMainTab("invite")}
+            style={{ ...bottomTabBtn, ...bottomTabDivider, ...(mainTab === "invite" ? bottomTabActive : null) }}
+          >
+            <span style={bottomTabIcon}>✉️</span>
+            招待
+          </button>
+        )}
       </div>
     </div>
   );
@@ -1573,6 +2018,328 @@ const dateBtn = {
   background: "#fff",
   color: "#111827",
   fontWeight: 900,
+};
+
+const topBar = {
+  position: "sticky",
+  top: 0,
+  zIndex: 20,
+  background: "#fff",
+  borderBottom: "1px solid #e5e7eb",
+};
+
+const topBarInner = {
+  height: 52,
+  padding: "0 6px 0 12px",
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "space-between",
+  maxWidth: 560,
+  margin: "0 auto",
+};
+
+const topLogo = {
+  fontWeight: 900,
+  fontSize: 14,
+  color: "#111827",
+  letterSpacing: "0.4px",
+};
+
+const topSettingsBtn = {
+  height: 32,
+  padding: "0 12px",
+  borderRadius: 999,
+  border: "1px solid #e5e7eb",
+  background: "#fff",
+  color: "#111827",
+  fontWeight: 800,
+  fontSize: 12,
+};
+
+const topSettingsBtnActive = {
+  background: "#111827",
+  color: "#fff",
+  border: "1px solid #111827",
+};
+
+const sectionTitleRow = {
+  display: "flex",
+  alignItems: "flex-end",
+  gap: 6,
+};
+
+const sectionBlock = {
+  display: "grid",
+  gap: 0,
+};
+
+const sectionTitleTab = {
+  padding: "6px 16px 4px",
+  border: "1px solid #e5e7eb",
+  borderBottom: "none",
+  borderRadius: "16px 16px 0 0",
+  background: "#fff",
+  color: "#111827",
+  fontWeight: 800,
+  fontSize: 13,
+  letterSpacing: "0.6px",
+};
+
+const sectionTitleLine = {
+  flex: 1,
+  borderBottom: "none",
+  marginBottom: 0,
+};
+
+const dailySheet = {
+  border: "1px solid #111827",
+  borderRadius: 6,
+  padding: 10,
+  display: "grid",
+  gap: 10,
+  background: "#fff",
+};
+
+const dailyHeaderRow = {
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "space-between",
+  gap: 12,
+  borderBottom: "1px solid #111827",
+  paddingBottom: 6,
+};
+
+const dailyDateBlock = {
+  display: "grid",
+  gap: 4,
+};
+
+const dailyDateInputRow = {
+  display: "flex",
+  alignItems: "center",
+  gap: 8,
+};
+
+const dailyDateInput = {
+  height: 28,
+  borderRadius: 6,
+  border: "1px solid #111827",
+  padding: "0 6px",
+  fontSize: 12,
+  color: "#111827",
+  background: "#fff",
+};
+
+const dailyDateWeekday = {
+  fontWeight: 700,
+  fontSize: 12,
+  color: "#111827",
+};
+
+const tempTabRow = {
+  display: "flex",
+  flexWrap: "wrap",
+  gap: 8,
+};
+
+const tempDateRow = {
+  display: "flex",
+  alignItems: "center",
+  gap: 8,
+  flexWrap: "wrap",
+};
+
+const tempDateLabel = {
+  fontSize: 12,
+  fontWeight: 700,
+  color: "#111827",
+};
+
+const tempDateInput = {
+  height: 32,
+  padding: "0 8px",
+  borderRadius: 10,
+  border: "1px solid #e5e7eb",
+  background: "#fff",
+  color: "#111827",
+  fontWeight: 700,
+  fontSize: 12,
+};
+
+const tempDateWeekday = {
+  fontSize: 12,
+  fontWeight: 700,
+  color: "#111827",
+};
+
+const tempTabBtn = {
+  padding: "6px 10px",
+  borderRadius: 999,
+  border: "1px solid #e5e7eb",
+  background: "#fff",
+  color: "#111827",
+  fontSize: 12,
+  fontWeight: 800,
+};
+
+const tempTabBtnActive = {
+  background: "#111827",
+  color: "#fff",
+  border: "1px solid #111827",
+};
+
+const tempTableWrap = {
+  border: "1px solid #e5e7eb",
+  borderRadius: 10,
+  overflowX: "auto",
+  background: "#fff",
+};
+
+const tempTable = {
+  display: "grid",
+  minWidth: 560,
+};
+
+const tempTableHeader = {
+  display: "grid",
+  borderBottom: "1px solid #e5e7eb",
+  background: "#f8fafc",
+};
+
+const tempCornerCell = {
+  padding: "8px 10px",
+  fontWeight: 800,
+  fontSize: 12,
+  color: "#475569",
+  borderRight: "1px solid #e5e7eb",
+};
+
+const tempTimeHeader = {
+  padding: "6px 8px",
+  display: "grid",
+  gap: 4,
+  borderRight: "1px solid #e5e7eb",
+};
+
+const tempTimeLabel = {
+  fontWeight: 800,
+  fontSize: 12,
+  color: "#111827",
+};
+
+const tempSubHeader = {
+  display: "grid",
+  gridTemplateColumns: "1fr 1fr",
+  gap: 6,
+  fontSize: 11,
+  color: "#6b7280",
+  fontWeight: 700,
+};
+
+const tempTableRow = {
+  display: "grid",
+  borderBottom: "1px solid #e5e7eb",
+};
+
+const tempDateCell = {
+  padding: "8px 10px",
+  fontWeight: 700,
+  fontSize: 12,
+  color: "#111827",
+  borderRight: "1px solid #e5e7eb",
+  background: "#fff",
+};
+
+const tempValueCell = {
+  padding: "6px 8px",
+  display: "grid",
+  gridTemplateColumns: "1fr 1fr",
+  gap: 6,
+  borderRight: "1px solid #e5e7eb",
+};
+
+const tempCellInput = {
+  height: 30,
+  padding: "0 8px",
+  borderRadius: 8,
+  border: "1px solid #e5e7eb",
+  background: "#fff",
+  color: "#111827",
+  fontSize: 12,
+  fontWeight: 700,
+};
+
+const dailyLabel = {
+  fontWeight: 700,
+  fontSize: 12,
+  color: "#111827",
+  marginRight: 6,
+};
+
+const dailyWeatherRow = {
+  display: "flex",
+  alignItems: "center",
+  gap: 6,
+};
+
+const dailyInlineInput = {
+  border: "none",
+  borderBottom: "1px solid #111827",
+  padding: "2px 4px",
+  fontSize: 12,
+  color: "#111827",
+  background: "transparent",
+  minWidth: 120,
+};
+
+const dailyAttendanceRow = {
+  display: "flex",
+  alignItems: "center",
+  gap: 6,
+  fontSize: 12,
+  color: "#111827",
+};
+
+const dailyAttendanceText = {
+  flex: 1,
+  borderBottom: "1px solid #111827",
+  paddingBottom: 2,
+};
+
+const dailyAttendanceInput = {
+  ...dailyAttendanceText,
+  border: "none",
+  borderBottom: "1px solid #111827",
+  padding: "2px 4px",
+  fontSize: 12,
+  color: "#111827",
+  background: "transparent",
+};
+
+const dailyBox = {
+  border: "1px solid #111827",
+  borderRadius: 4,
+  overflow: "hidden",
+};
+
+const dailyBoxTitle = {
+  fontWeight: 800,
+  fontSize: 12,
+  color: "#111827",
+  padding: "6px 8px",
+  borderBottom: "1px solid #111827",
+  background: "#f8fafc",
+};
+
+const dailyRuledTextarea = {
+  width: "100%",
+  border: "none",
+  padding: "6px 10px",
+  fontSize: 12,
+  lineHeight: "24px",
+  color: "#111827",
+  backgroundImage: "repeating-linear-gradient(to bottom, #fff, #fff 23px, #e5e7eb 24px)",
+  resize: "vertical",
 };
 
 const dateInput = {
@@ -1613,6 +2380,7 @@ const bottomTabs = {
   gridTemplateColumns: "repeat(4, 1fr)",
   background: "#fff",
   borderTop: "1px solid #e5e7eb",
+  borderRadius: 0,
   zIndex: 20,
 };
 
@@ -1627,6 +2395,7 @@ const bottomTabBtn = {
   fontSize: 11,
   fontWeight: 700,
   color: "#6b7280",
+  borderRadius: 0,
 };
 
 const bottomTabActive = {
@@ -1720,6 +2489,13 @@ const panel = {
   padding: 12,
 };
 
+const panelWithTab = {
+  ...panel,
+  border: "1px solid #e5e7eb",
+  borderRadius: "0 12px 12px 12px",
+  marginTop: 0,
+};
+
 const chatPanel = {
   ...panel,
   minHeight: "70vh",
@@ -1763,6 +2539,7 @@ const settingsTextarea = {
   borderRadius: 10,
   border: "1px solid #e5e7eb",
   background: "#fff",
+  color: "#111827",
   fontSize: 14,
   resize: "vertical",
 };

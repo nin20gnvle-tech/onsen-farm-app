@@ -6,6 +6,7 @@ use App\Models\Field;
 use App\Models\Product;
 use App\Models\TaskType;
 use App\Models\User;
+use App\Models\TemperatureLocation;
 use Illuminate\Database\Console\Seeds\WithoutModelEvents;
 use Illuminate\Database\Seeder;
 use Illuminate\Support\Facades\Hash;
@@ -40,6 +41,28 @@ class DatabaseSeeder extends Seeder
 
         foreach (['いちご', 'みかん', 'ぶどう', 'りんご'] as $name) {
             Product::firstOrCreate(['name' => $name]);
+        }
+
+        $locations = [
+            ['name' => 'バナナ庫', 'type' => 'room'],
+            ['name' => '外気温', 'type' => 'outdoor'],
+            ['name' => '2連右棟', 'type' => 'field'],
+            ['name' => '2連左棟', 'type' => 'field'],
+            ['name' => '3連右棟', 'type' => 'field'],
+            ['name' => '3連中棟', 'type' => 'field'],
+            ['name' => '3連左棟', 'type' => 'field'],
+            ['name' => '単連', 'type' => 'field'],
+        ];
+
+        foreach ($locations as $index => $location) {
+            TemperatureLocation::firstOrCreate(
+                ['name' => $location['name']],
+                [
+                    'type' => $location['type'],
+                    'sort_order' => $index,
+                    'is_active' => true,
+                ]
+            );
         }
     }
 }
