@@ -2,8 +2,10 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import FieldTimeline from "../components/FieldTimeline";
 import { ymd } from "../lib/time";
+import topLogoImage from "../assets/logo.jpg";
 
 const BASE_URL = "http://127.0.0.1:8000";
+const TOP_LOGO_SRC = topLogoImage;
 
 export default function DashboardPage() {
   const navigate = useNavigate();
@@ -1003,12 +1005,14 @@ export default function DashboardPage() {
     <div style={{ minHeight: "100vh", background: "#f8fafc", paddingBottom: 144 }}>
       <div style={topBar}>
         <div style={topBarInner}>
-          <div style={topLogo}>farm-app</div>
+          <div style={topLogo}>
+            <img src={TOP_LOGO_SRC} alt="別府温泉フルーツファーム" style={topLogoImg} />
+          </div>
           <button
             onClick={() => setMainTab("settings")}
             style={{ ...topSettingsBtn, ...(mainTab === "settings" ? topSettingsBtnActive : null) }}
           >
-            設定
+            ⚙️
           </button>
         </div>
       </div>
@@ -1093,51 +1097,48 @@ export default function DashboardPage() {
               {!inventoryLoading && inventoryItems.length === 0 && (
                 <div style={{ color: "#6b7280", fontSize: 12 }}>在庫データがありません</div>
               )}
-              {!inventoryLoading && inventoryItems.length > 0 && (
-                <div style={inventoryHeader}>
-                  <div />
-                  <div>在庫数</div>
-                </div>
-              )}
-              <div style={{ display: "grid", gap: 8 }}>
-                {(() => {
+              {!inventoryLoading &&
+                inventoryItems.length > 0 &&
+                (() => {
                   const lowItems = inventoryItems.filter((i) => Number(i.quantity) <= 1);
                   const normalItems = inventoryItems.filter((i) => Number(i.quantity) > 1);
                   return (
                     <>
-                      {lowItems.length > 0 && (
-                        <div style={inventoryGroupLow}>残り少</div>
-                      )}
-                      {lowItems.map((item) => (
-                        <div key={item.id} style={inventoryRow}>
-                          <div style={{ fontWeight: 800, color: "#111827" }}>{item.name}</div>
-                          <div style={inventoryQtyLow}>
-                            {item.quantity ?? 0}
-                            {item.unit ? ` ${item.unit}` : ""}
-                          </div>
-                        </div>
-                      ))}
-                      {normalItems.map((item, idx) => {
-                        const group = getKanaGroup(item.name ?? "");
-                        const prevGroup =
-                          idx > 0 ? getKanaGroup(normalItems[idx - 1].name ?? "") : null;
-                        return (
-                          <div key={item.id}>
-                            {group && group !== prevGroup && <div style={inventoryGroup}>{group}〜</div>}
-                            <div style={inventoryRow}>
-                              <div style={{ fontWeight: 800, color: "#111827" }}>{item.name}</div>
-                              <div style={inventoryQty}>
-                                {item.quantity ?? 0}
-                                {item.unit ? ` ${item.unit}` : ""}
-                              </div>
+                      <div style={inventoryHeader}>
+                        <div>{lowItems.length > 0 ? <span style={inventoryGroupLow}>残り少</span> : ""}</div>
+                        <div>在庫数</div>
+                      </div>
+                      <div style={{ display: "grid", gap: 8 }}>
+                        {lowItems.map((item) => (
+                          <div key={item.id} style={inventoryRow}>
+                            <div style={{ fontWeight: 800, color: "#111827" }}>{item.name}</div>
+                            <div style={inventoryQtyLow}>
+                              {item.quantity ?? 0}
+                              {item.unit ? ` ${item.unit}` : ""}
                             </div>
                           </div>
-                        );
-                      })}
+                        ))}
+                        {normalItems.map((item, idx) => {
+                          const group = getKanaGroup(item.name ?? "");
+                          const prevGroup =
+                            idx > 0 ? getKanaGroup(normalItems[idx - 1].name ?? "") : null;
+                          return (
+                            <div key={item.id}>
+                              {group && group !== prevGroup && <div style={inventoryGroup}>{group}〜</div>}
+                              <div style={inventoryRow}>
+                                <div style={{ fontWeight: 800, color: "#111827" }}>{item.name}</div>
+                                <div style={inventoryQty}>
+                                  {item.quantity ?? 0}
+                                  {item.unit ? ` ${item.unit}` : ""}
+                                </div>
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
                     </>
                   );
                 })()}
-              </div>
             </div>
             <div style={panel}>
               <div style={panelTitle}>入出庫・棚卸し履歴</div>
@@ -2039,21 +2040,27 @@ const topBarInner = {
 };
 
 const topLogo = {
-  fontWeight: 900,
-  fontSize: 14,
-  color: "#111827",
-  letterSpacing: "0.4px",
+  display: "flex",
+  alignItems: "center",
+  height: 32,
+};
+
+const topLogoImg = {
+  height: 28,
+  width: "auto",
+  objectFit: "contain",
 };
 
 const topSettingsBtn = {
-  height: 32,
+  height: 36,
   padding: "0 12px",
   borderRadius: 999,
   border: "1px solid #e5e7eb",
   background: "#fff",
   color: "#111827",
   fontWeight: 800,
-  fontSize: 12,
+  fontSize: 18,
+  lineHeight: "18px",
 };
 
 const topSettingsBtnActive = {
