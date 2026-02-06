@@ -34,6 +34,8 @@ export default function DashboardPage() {
   const [profileSaveErr, setProfileSaveErr] = useState("");
   const [passwordRequestStatus, setPasswordRequestStatus] = useState("");
   const [mainTab, setMainTab] = useState("logs"); // logs | inventory | daily | temperature | invite | settings
+  const [inventoryTab, setInventoryTab] = useState("items"); // items | history
+  const [isMobile, setIsMobile] = useState(() => window.innerWidth < 640);
   const dateYmd = useMemo(() => ymd(date), [date]);
   const weekdayLabel = useMemo(() => {
     const d = new Date(`${dateYmd}T00:00:00`);
@@ -118,6 +120,12 @@ export default function DashboardPage() {
   const [dailySaveMsg, setDailySaveMsg] = useState("");
   const [tempSaving, setTempSaving] = useState(false);
   const [tempSaveMsg, setTempSaveMsg] = useState("");
+
+  useEffect(() => {
+    const handleResize = () => setIsMobile(window.innerWidth < 640);
+    window.addEventListener("resize", handleResize);
+    return () => window.removeEventListener("resize", handleResize);
+  }, []);
   const defaultTempLocations = [
     "バナナ庫",
     "外気温",
@@ -133,6 +141,7 @@ export default function DashboardPage() {
   );
   const tempLocationNames = useMemo(() => tempLocations.map((location) => location.name), [tempLocations]);
   const tempTimes = ["08:00", "12:00", "17:00"];
+  const [tempTimeTab, setTempTimeTab] = useState(tempTimes[0]);
   const [tempLocationTab, setTempLocationTab] = useState(defaultTempLocations[0]);
   const [tempInputs, setTempInputs] = useState(() =>
     Object.fromEntries(defaultTempLocations.map((name) => [name, {}]))
@@ -1001,10 +1010,31 @@ export default function DashboardPage() {
     </div>
   );
 
+  const tempDateColWidth = isMobile ? 90 : 120;
+  const tempDateCellStyle = isMobile ? { ...tempDateCell, padding: "6px 6px", fontSize: 11 } : tempDateCell;
+  const tempValueCellStyle = isMobile ? { ...tempValueCell, padding: "6px 6px", gap: 4 } : tempValueCell;
+  const tempCellInputStyle = isMobile ? { ...tempCellInput, height: 28, fontSize: 11, padding: "0 6px" } : tempCellInput;
+
+  const renderMobileStatus = (status) => {
+    if (status === "done") return { label: "完了", style: mobileLogStatusDone };
+    if (status === "paused") return { label: "中断中", style: mobileLogStatusPaused };
+    return { label: "進行中", style: mobileLogStatusRunning };
+  };
+
+  const headerControlsStyle = isMobile
+    ? { padding: 12, display: "flex", alignItems: "center", gap: 6, maxWidth: "100%", margin: "0 auto" }
+    : { padding: 12, display: "flex", alignItems: "center", gap: 10, maxWidth: 560, margin: "0 auto" };
+
+  const dateInputStyle = isMobile ? { ...dateInput, width: "100%", minWidth: 0 } : dateInput;
+  const dateBtnStyle = isMobile ? { ...dateBtn, padding: "0 8px", height: 34 } : dateBtn;
+  const topBarInnerStyle = isMobile ? { ...topBarInner, maxWidth: "100%", padding: "0 8px" } : topBarInner;
+  const bottomTabBtnStyle = isMobile ? { ...bottomTabBtn, fontSize: 10 } : bottomTabBtn;
+  const bottomTabIconStyle = isMobile ? { ...bottomTabIcon, fontSize: 18, lineHeight: "18px" } : bottomTabIcon;
+
   return (
     <div style={{ minHeight: "100vh", background: "#f8fafc", paddingBottom: 144 }}>
       <div style={topBar}>
-        <div style={topBarInner}>
+        <div style={topBarInnerStyle}>
           <div style={topLogo}>
             <img src={TOP_LOGO_SRC} alt="別府温泉フルーツファーム" style={topLogoImg} />
           </div>
@@ -1019,8 +1049,8 @@ export default function DashboardPage() {
       {/* Header */}
       {mainTab === "logs" && (
         <div style={{ position: "sticky", top: 52, zIndex: 10, background: "#fff", borderBottom: "1px solid #e5e7eb" }}>
-          <div style={{ padding: 12, display: "flex", alignItems: "center", gap: 10, maxWidth: 560, margin: "0 auto" }}>
-            <button onClick={() => setDate(new Date(date.getTime() - 86400000))} style={dateBtn}>
+          <div style={headerControlsStyle}>
+            <button onClick={() => setDate(new Date(date.getTime() - 86400000))} style={dateBtnStyle}>
               ◀ 前日
             </button>
             <div style={{ flex: 1, display: "flex", justifyContent: "center", gap: 10 }}>
@@ -1031,10 +1061,10 @@ export default function DashboardPage() {
                   if (!e.target.value) return;
                   setDate(new Date(`${e.target.value}T00:00:00`));
                 }}
-                style={dateInput}
+                style={dateInputStyle}
               />
             </div>
-            <button onClick={() => setDate(new Date(date.getTime() + 86400000))} style={dateBtn}>
+            <button onClick={() => setDate(new Date(date.getTime() + 86400000))} style={dateBtnStyle}>
               翌日 ▶
             </button>
           </div>
@@ -1067,18 +1097,42 @@ export default function DashboardPage() {
 
             {loading && !data && <div style={{ color: "#6b7280" }}>読み込み中...</div>}
 
-            {sections.map((sec) => (
-              <FieldTimeline
-                key={`${tab}-${sec.field?.id ?? Math.random()}`}
-                fieldName={sec.field?.name ?? "圃場"}
-                logs={sec.logs ?? []}
-                dayStart={DAY_START}
-                dayEnd={DAY_END}
-                gridHours={GRID_HOURS}
-                nowMin={nowMin}
-                showDoneDetails={tab === "done"}
-              />
-            ))}
+            {isMobile
+              ? sections.map((sec) => (
+                  <div key={`${tab}-${sec.field?.id ?? Math.random()}`} style={mobileSection}>
+                    <div style={mobileSectionTitle}>{sec.field?.name ?? "圃場"}</div>
+                    {(!sec.logs || sec.logs.length === 0) && <div style={mobileLogEmpty}>この圃場のログはありません</div>}
+                    <div style={{ display: "grid", gap: 8 }}>
+                      {(sec.logs ?? []).map((log) => {
+                        const { label, style } = renderMobileStatus(log.status);
+                        return (
+                          <div key={log.id} style={mobileLogCard}>
+                            <div style={mobileLogHeader}>
+                              <div style={mobileLogName}>{log.user?.name ?? "?"}</div>
+                              <div style={{ ...mobileLogStatus, ...style }}>{label}</div>
+                            </div>
+                            <div style={mobileLogSub}>{log.task_type?.name ?? "作業"}</div>
+                            <div style={mobileLogTime}>
+                              作業時間：{log.started_time ?? "--:--"} → {log.ended_time ?? "--:--"}
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                ))
+              : sections.map((sec) => (
+                  <FieldTimeline
+                    key={`${tab}-${sec.field?.id ?? Math.random()}`}
+                    fieldName={sec.field?.name ?? "圃場"}
+                    logs={sec.logs ?? []}
+                    dayStart={DAY_START}
+                    dayEnd={DAY_END}
+                    gridHours={GRID_HOURS}
+                    nowMin={nowMin}
+                    showDoneDetails={tab === "done"}
+                  />
+                ))}
 
             {!loading && sections.length === 0 && (
               <div style={{ color: "#6b7280", background: "#fff", border: "1px solid #e5e7eb", borderRadius: 12, padding: 16 }}>
@@ -1090,108 +1144,121 @@ export default function DashboardPage() {
 
         {mainTab === "inventory" && (
           <div style={sectionBlock}>
-            {renderSectionTitle("在庫")}
-            <div style={panelWithTab}>
-              {inventoryErr && <div style={{ color: "#b91c1c", fontSize: 12 }}>{inventoryErr}</div>}
-              {inventoryLoading && <div style={{ color: "#6b7280", fontSize: 12 }}>読み込み中...</div>}
-              {!inventoryLoading && inventoryItems.length === 0 && (
-                <div style={{ color: "#6b7280", fontSize: 12 }}>在庫データがありません</div>
-              )}
-              {!inventoryLoading &&
-                inventoryItems.length > 0 &&
-                (() => {
-                  const lowItems = inventoryItems.filter((i) => Number(i.quantity) <= 1);
-                  const normalItems = inventoryItems.filter((i) => Number(i.quantity) > 1);
-                  return (
-                    <>
+            <div style={inventoryTabRow}>
+              <button style={tabBtn(inventoryTab === "items")} onClick={() => setInventoryTab("items")}>
+                在庫管理
+              </button>
+              <button style={tabBtn(inventoryTab === "history")} onClick={() => setInventoryTab("history")}>
+                入出庫・棚卸し履歴
+              </button>
+            </div>
+
+            {inventoryTab === "items" && (
+              <div style={panelWithTab}>
+                {inventoryErr && <div style={{ color: "#b91c1c", fontSize: 12 }}>{inventoryErr}</div>}
+                {inventoryLoading && <div style={{ color: "#6b7280", fontSize: 12 }}>読み込み中...</div>}
+                {!inventoryLoading && inventoryItems.length === 0 && (
+                  <div style={{ color: "#6b7280", fontSize: 12 }}>在庫データがありません</div>
+                )}
+                {!inventoryLoading &&
+                  inventoryItems.length > 0 &&
+                  (() => {
+                    const lowItems = inventoryItems.filter((i) => Number(i.quantity) <= 1);
+                    const normalItems = inventoryItems.filter((i) => Number(i.quantity) > 1);
+                    return (
+                      <>
                       <div style={inventoryHeader}>
-                        <div>{lowItems.length > 0 ? <span style={inventoryGroupLow}>残り少</span> : ""}</div>
-                        <div>在庫数</div>
-                      </div>
-                      <div style={{ display: "grid", gap: 8 }}>
-                        {lowItems.map((item) => (
-                          <div key={item.id} style={inventoryRow}>
-                            <div style={{ fontWeight: 800, color: "#111827" }}>{item.name}</div>
-                            <div style={inventoryQtyLow}>
-                              {item.quantity ?? 0}
-                              {item.unit ? ` ${item.unit}` : ""}
-                            </div>
-                          </div>
-                        ))}
-                        {normalItems.map((item, idx) => {
-                          const group = getKanaGroup(item.name ?? "");
-                          const prevGroup =
-                            idx > 0 ? getKanaGroup(normalItems[idx - 1].name ?? "") : null;
-                          return (
-                            <div key={item.id}>
-                              {group && group !== prevGroup && <div style={inventoryGroup}>{group}〜</div>}
-                              <div style={inventoryRow}>
-                                <div style={{ fontWeight: 800, color: "#111827" }}>{item.name}</div>
-                                <div style={inventoryQty}>
-                                  {item.quantity ?? 0}
-                                  {item.unit ? ` ${item.unit}` : ""}
-                                </div>
+                        <div>{lowItems.length > 0 ? <span style={inventoryGroupLowInline}>残り少</span> : ""}</div>
+                          <div>在庫数</div>
+                        </div>
+                        <div style={{ display: "grid", gap: 8 }}>
+                          {lowItems.map((item) => (
+                            <div key={item.id} style={inventoryRow}>
+                              <div style={{ fontWeight: 800, color: "#111827" }}>{item.name}</div>
+                              <div style={inventoryQtyLow}>
+                                {item.quantity ?? 0}
+                                {item.unit ? ` ${item.unit}` : ""}
                               </div>
                             </div>
-                          );
-                        })}
-                      </div>
-                    </>
-                  );
-                })()}
-            </div>
-            <div style={panel}>
-              <div style={panelTitle}>入出庫・棚卸し履歴</div>
-              <div style={movementFilterRow}>
-                <label style={movementFilterLabel}>
-                  日付
-                  <input
-                    ref={movementDateRef}
-                    type="date"
-                    value={movementDate}
-                    onChange={(e) => setMovementDate(e.target.value)}
-                    onFocus={() => {
-                      if (movementDateRef.current?.showPicker) {
-                        movementDateRef.current.showPicker();
-                      }
-                    }}
-                    style={movementFilterInput}
-                  />
-                </label>
-                <button style={movementFilterClear} onClick={() => setMovementDate("")}>
-                  クリア
-                </button>
-              </div>
-              {movementLoading && <div style={{ color: "#6b7280", fontSize: 12 }}>読み込み中...</div>}
-              {!movementLoading && movementErr && (
-                <div style={{ color: "#b91c1c", fontSize: 12 }}>{movementErr}</div>
-              )}
-              {!movementLoading && !movementErr && movementItems.length === 0 && (
-                <div style={{ color: "#6b7280", fontSize: 12 }}>履歴がありません</div>
-              )}
-              {!movementLoading && !movementErr && movementItems.length > 0 && (
-                <div style={{ display: "grid", gap: 8 }}>
-                  {movementItems.map((m) => {
-                    const typeLabel = getMovementTypeLabel(m.type);
-                    const qty = formatQuantity(m.quantity);
-                    const unit = m.item?.unit ? ` ${m.item.unit}` : "";
-                    return (
-                      <div key={m.id} style={movementRow}>
-                        <div style={movementTitle}>
-                          <span style={movementUser}>{m.user?.name ?? "不明"}</span>
-                          が
-                          <span style={movementItem}>{m.item?.name ?? "不明"}</span>
-                          を
-                          <span style={movementQty}>{qty}{unit}</span>
-                          {typeLabel}
+                          ))}
+                          {normalItems.map((item, idx) => {
+                            const group = getKanaGroup(item.name ?? "");
+                            const prevGroup =
+                              idx > 0 ? getKanaGroup(normalItems[idx - 1].name ?? "") : null;
+                            return (
+                              <div key={item.id}>
+                                {group && group !== prevGroup && <div style={inventoryGroup}>{group}〜</div>}
+                                <div style={inventoryRow}>
+                                  <div style={{ fontWeight: 800, color: "#111827" }}>{item.name}</div>
+                                  <div style={inventoryQty}>
+                                    {item.quantity ?? 0}
+                                    {item.unit ? ` ${item.unit}` : ""}
+                                  </div>
+                                </div>
+                              </div>
+                            );
+                          })}
                         </div>
-                        <div style={movementMeta}>{formatDateTime(m.created_at)}</div>
-                      </div>
+                      </>
                     );
-                  })}
+                  })()}
+              </div>
+            )}
+
+            {inventoryTab === "history" && (
+              <div style={panel}>
+                <div style={panelTitle}>入出庫・棚卸し履歴</div>
+                <div style={movementFilterRow}>
+                  <label style={movementFilterLabel}>
+                    日付
+                    <input
+                      ref={movementDateRef}
+                      type="date"
+                      value={movementDate}
+                      onChange={(e) => setMovementDate(e.target.value)}
+                      onFocus={() => {
+                        if (movementDateRef.current?.showPicker) {
+                          movementDateRef.current.showPicker();
+                        }
+                      }}
+                      style={movementFilterInput}
+                    />
+                  </label>
+                  <button style={movementFilterClear} onClick={() => setMovementDate("")}>
+                    クリア
+                  </button>
                 </div>
-              )}
-            </div>
+                {movementLoading && <div style={{ color: "#6b7280", fontSize: 12 }}>読み込み中...</div>}
+                {!movementLoading && movementErr && (
+                  <div style={{ color: "#b91c1c", fontSize: 12 }}>{movementErr}</div>
+                )}
+                {!movementLoading && !movementErr && movementItems.length === 0 && (
+                  <div style={{ color: "#6b7280", fontSize: 12 }}>履歴がありません</div>
+                )}
+                {!movementLoading && !movementErr && movementItems.length > 0 && (
+                  <div style={{ display: "grid", gap: 8 }}>
+                    {movementItems.map((m) => {
+                      const typeLabel = getMovementTypeLabel(m.type);
+                      const qty = formatQuantity(m.quantity);
+                      const unit = m.item?.unit ? ` ${m.item.unit}` : "";
+                      return (
+                        <div key={m.id} style={movementRow}>
+                          <div style={movementTitle}>
+                            <span style={movementUser}>{m.user?.name ?? "不明"}</span>
+                            が
+                            <span style={movementItem}>{m.item?.name ?? "不明"}</span>
+                            を
+                            <span style={movementQty}>{qty}{unit}</span>
+                            {typeLabel}
+                          </div>
+                          <div style={movementMeta}>{formatDateTime(m.created_at)}</div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+            )}
           </div>
         )}
 
@@ -1341,16 +1408,33 @@ export default function DashboardPage() {
                     </button>
                   ))}
                 </div>
+                {isMobile && (
+                  <div style={tempTimeTabRow}>
+                    {tempTimes.map((time) => (
+                      <button
+                        key={time}
+                        type="button"
+                        onClick={() => setTempTimeTab(time)}
+                        style={{
+                          ...tempTabBtn,
+                          ...(tempTimeTab === time ? tempTabBtnActive : null),
+                        }}
+                      >
+                        {time}
+                      </button>
+                    ))}
+                  </div>
+                )}
                 <div style={tempTableWrap}>
-                  <div style={tempTable}>
+                  <div style={{ ...tempTable, ...(isMobile ? { minWidth: 320 } : null) }}>
                     <div
                       style={{
                         ...tempTableHeader,
-                        gridTemplateColumns: `120px repeat(${tempTimes.length}, 1fr)`,
+                        gridTemplateColumns: `${tempDateColWidth}px repeat(${(isMobile ? 1 : tempTimes.length)}, 1fr)`,
                       }}
                     >
                       <div style={tempCornerCell}>日付</div>
-                      {tempTimes.map((time) => (
+                      {(isMobile ? [tempTimeTab] : tempTimes).map((time) => (
                         <div key={time} style={tempTimeHeader}>
                           <div style={tempTimeLabel}>{time}</div>
                           <div style={tempSubHeader}>
@@ -1367,21 +1451,21 @@ export default function DashboardPage() {
                           key={day.dateKey}
                           style={{
                             ...tempTableRow,
-                            gridTemplateColumns: `120px repeat(${tempTimes.length}, 1fr)`,
+                            gridTemplateColumns: `${tempDateColWidth}px repeat(${(isMobile ? 1 : tempTimes.length)}, 1fr)`,
                           }}
                         >
-                          <div style={tempDateCell}>{day.label}</div>
-                          {tempTimes.map((time) => {
+                          <div style={tempDateCellStyle}>{day.label}</div>
+                          {(isMobile ? [tempTimeTab] : tempTimes).map((time) => {
                             const entry = dayData[time] ?? { temp: "", humidity: "" };
                             return (
-                              <div key={`${day.dateKey}-${time}`} style={tempValueCell}>
+                              <div key={`${day.dateKey}-${time}`} style={tempValueCellStyle}>
                                 <input
                                   type="text"
                                   value={entry.temp}
                                   onChange={(e) =>
                                     updateTempInput(tempLocationTab, day.dateKey, time, "temp", e.target.value)
                                   }
-                                  style={tempCellInput}
+                                  style={tempCellInputStyle}
                                   placeholder="温度"
                                 />
                                 <input
@@ -1390,7 +1474,7 @@ export default function DashboardPage() {
                                   onChange={(e) =>
                                     updateTempInput(tempLocationTab, day.dateKey, time, "humidity", e.target.value)
                                   }
-                                  style={tempCellInput}
+                                  style={tempCellInputStyle}
                                   placeholder="湿度"
                                 />
                               </div>
@@ -1575,7 +1659,14 @@ export default function DashboardPage() {
         <div
           style={{
             ...actionBar,
-            gridTemplateColumns: tab === "done" ? "1.6fr 0.8fr" : "1.8fr 0.6fr 0.6fr",
+            ...(isMobile ? { left: 10, right: 10 } : null),
+            gridTemplateColumns: isMobile
+              ? tab === "done"
+                ? "1.2fr 0.8fr"
+                : "1.6fr 0.7fr 0.7fr"
+              : tab === "done"
+                ? "1.6fr 0.8fr"
+                : "1.8fr 0.6fr 0.6fr",
           }}
         >
           <button onClick={openStart} style={actionBtnPrimary} disabled={actionLoading}>
@@ -1605,7 +1696,7 @@ export default function DashboardPage() {
       {stockAdjustOpen && (
         <div style={modalOverlay}>
           <div style={modalCard}>
-            <div style={{ fontWeight: 900, fontSize: 16, marginBottom: 8 }}>棚卸し調整</div>
+            <div style={{ fontWeight: 900, fontSize: 16, marginBottom: 8 }}>棚卸し</div>
             {stockAdjustErr && (
               <div style={{ color: "#b91c1c", background: "#fff", border: "1px solid #fecaca", padding: 8, borderRadius: 10 }}>
                 {stockAdjustErr}
@@ -1752,7 +1843,13 @@ export default function DashboardPage() {
 
       {/* Inventory Action Bar */}
       {mainTab === "inventory" && (
-        <div style={{ ...actionBar, gridTemplateColumns: "1.3fr 1.3fr 0.4fr" }}>
+        <div
+          style={{
+            ...actionBar,
+            ...(isMobile ? { left: 10, right: 10 } : null),
+            gridTemplateColumns: isMobile ? "1fr 1fr 1fr" : "1.3fr 1.3fr 0.4fr",
+          }}
+        >
           <button style={invBtnIn} onClick={openStockIn}>
             入庫
           </button>
@@ -1760,7 +1857,7 @@ export default function DashboardPage() {
             出庫
           </button>
           <button style={invBtnAdjust} onClick={openStockAdjust}>
-            棚卸し調整
+            棚卸し
           </button>
         </div>
       )}
@@ -1972,37 +2069,37 @@ export default function DashboardPage() {
           gridTemplateColumns: `repeat(${role === "admin" ? 5 : 4}, 1fr)`,
         }}
       >
-        <button onClick={() => setMainTab("logs")} style={{ ...bottomTabBtn, ...(mainTab === "logs" ? bottomTabActive : null) }}>
-          <span style={bottomTabIcon}>🗒️</span>
+        <button onClick={() => setMainTab("logs")} style={{ ...bottomTabBtnStyle, ...(mainTab === "logs" ? bottomTabActive : null) }}>
+          <span style={bottomTabIconStyle}>🗒️</span>
           作業ログ
         </button>
         <button
           onClick={() => setMainTab("inventory")}
-          style={{ ...bottomTabBtn, ...bottomTabDivider, ...(mainTab === "inventory" ? bottomTabActive : null) }}
+          style={{ ...bottomTabBtnStyle, ...bottomTabDivider, ...(mainTab === "inventory" ? bottomTabActive : null) }}
         >
-          <span style={bottomTabIcon}>📦</span>
-          在庫
+          <span style={bottomTabIconStyle}>📦</span>
+          在庫管理
         </button>
         <button
           onClick={() => setMainTab("daily")}
-          style={{ ...bottomTabBtn, ...bottomTabDivider, ...(mainTab === "daily" ? bottomTabActive : null) }}
+          style={{ ...bottomTabBtnStyle, ...bottomTabDivider, ...(mainTab === "daily" ? bottomTabActive : null) }}
         >
-          <span style={bottomTabIcon}>📝</span>
+          <span style={bottomTabIconStyle}>📝</span>
           日報作成
         </button>
         <button
           onClick={() => setMainTab("temperature")}
-          style={{ ...bottomTabBtn, ...bottomTabDivider, ...(mainTab === "temperature" ? bottomTabActive : null) }}
+          style={{ ...bottomTabBtnStyle, ...bottomTabDivider, ...(mainTab === "temperature" ? bottomTabActive : null) }}
         >
-          <span style={bottomTabIcon}>🌡️</span>
+          <span style={bottomTabIconStyle}>🌡️</span>
           温度計測
         </button>
         {role === "admin" && (
           <button
             onClick={() => setMainTab("invite")}
-            style={{ ...bottomTabBtn, ...bottomTabDivider, ...(mainTab === "invite" ? bottomTabActive : null) }}
+            style={{ ...bottomTabBtnStyle, ...bottomTabDivider, ...(mainTab === "invite" ? bottomTabActive : null) }}
           >
-            <span style={bottomTabIcon}>✉️</span>
+            <span style={bottomTabIconStyle}>✉️</span>
             招待
           </button>
         )}
@@ -2147,6 +2244,11 @@ const tempTabRow = {
   display: "flex",
   flexWrap: "wrap",
   gap: 8,
+};
+
+const tempTimeTabRow = {
+  ...tempTabRow,
+  marginTop: 4,
 };
 
 const tempDateRow = {
@@ -2463,6 +2565,86 @@ const actionBtnGhost = {
   border: "1px solid #e2e8f0",
 };
 
+const mobileSection = {
+  background: "#fff",
+  border: "1px solid #e5e7eb",
+  borderRadius: 12,
+  padding: 12,
+  display: "grid",
+  gap: 10,
+};
+
+const mobileSectionTitle = {
+  fontWeight: 900,
+  color: "#111827",
+  fontSize: 14,
+};
+
+const mobileLogEmpty = {
+  fontSize: 12,
+  color: "#6b7280",
+};
+
+const mobileLogCard = {
+  border: "1px solid #e5e7eb",
+  borderRadius: 12,
+  padding: 10,
+  background: "#fff",
+  display: "grid",
+  gap: 6,
+};
+
+const mobileLogHeader = {
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "space-between",
+  gap: 8,
+};
+
+const mobileLogName = {
+  fontWeight: 900,
+  color: "#111827",
+  fontSize: 14,
+};
+
+const mobileLogStatus = {
+  fontSize: 11,
+  fontWeight: 800,
+  padding: "2px 8px",
+  borderRadius: 999,
+  border: "1px solid transparent",
+};
+
+const mobileLogStatusRunning = {
+  color: "#0e7490",
+  background: "#ecfeff",
+  border: "1px solid #cffafe",
+};
+
+const mobileLogStatusPaused = {
+  color: "#c2410c",
+  background: "#fff7ed",
+  border: "1px solid #ffedd5",
+};
+
+const mobileLogStatusDone = {
+  color: "#1e293b",
+  background: "#f1f5f9",
+  border: "1px solid #e2e8f0",
+};
+
+const mobileLogSub = {
+  fontSize: 12,
+  color: "#475569",
+  fontWeight: 700,
+};
+
+const mobileLogTime = {
+  fontSize: 12,
+  color: "#111827",
+  fontWeight: 700,
+};
+
 const invBtnBase = {
   ...actionBtnBase,
   border: "1px solid transparent",
@@ -2633,6 +2815,12 @@ const settingsSaveBtn = {
   fontSize: 13,
 };
 
+const inventoryTabRow = {
+  display: "flex",
+  gap: 8,
+  marginBottom: 8,
+};
+
 const inventoryRow = {
   display: "flex",
   alignItems: "center",
@@ -2684,6 +2872,13 @@ const inventoryGroup = {
 const inventoryGroupLow = {
   ...inventoryGroup,
   color: "#ef4444",
+};
+
+const inventoryGroupLowInline = {
+  ...inventoryGroupLow,
+  padding: 0,
+  marginTop: 0,
+  marginBottom: 0,
 };
 
 const movementRow = {
