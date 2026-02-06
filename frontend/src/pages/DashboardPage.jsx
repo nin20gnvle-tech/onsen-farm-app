@@ -1355,14 +1355,6 @@ export default function DashboardPage() {
                   <div style={{ color: "#6b7280", fontSize: 12 }}>
                     {dailySaveMsg || "PDFはブラウザの印刷機能で保存します。"}
                   </div>
-                  <div style={{ display: "flex", gap: 8 }}>
-                    <button style={settingsSaveBtn} onClick={handleDailySave} disabled={dailySaving}>
-                      {dailySaving ? "保存中..." : "保存"}
-                    </button>
-                    <button style={settingsSaveBtn} onClick={handleDailyDownload}>
-                      PDFダウンロード
-                    </button>
-                  </div>
                 </div>
               </div>
             </div>
@@ -1489,9 +1481,6 @@ export default function DashboardPage() {
                   <div style={{ color: "#6b7280", fontSize: 12 }}>
                     {tempSaveMsg || "保存ボタンで月ごとの入力内容を保存します。"}
                   </div>
-                  <button style={settingsSaveBtn} onClick={handleTempSave} disabled={tempSaving}>
-                    {tempSaving ? "保存中..." : "保存"}
-                  </button>
                 </div>
               </div>
             </div>
@@ -1858,6 +1847,39 @@ export default function DashboardPage() {
           </button>
           <button style={invBtnAdjust} onClick={openStockAdjust}>
             棚卸し
+          </button>
+        </div>
+      )}
+
+      {/* Daily Report Action Bar */}
+      {mainTab === "daily" && (
+        <div
+          style={{
+            ...actionBar,
+            ...(isMobile ? { left: 10, right: 10 } : null),
+            gridTemplateColumns: "1fr 1fr",
+          }}
+        >
+          <button style={actionBtnPrimary} onClick={handleDailySave} disabled={dailySaving}>
+            {dailySaving ? "保存中..." : "保存"}
+          </button>
+          <button style={actionBtnSecondary} onClick={handleDailyDownload}>
+            PDFダウンロード
+          </button>
+        </div>
+      )}
+
+      {/* Temperature Action Bar */}
+      {mainTab === "temperature" && (
+        <div
+          style={{
+            ...actionBar,
+            ...(isMobile ? { left: 10, right: 10 } : null),
+            gridTemplateColumns: "1fr",
+          }}
+        >
+          <button style={actionBtnPrimary} onClick={handleTempSave} disabled={tempSaving}>
+            {tempSaving ? "保存中..." : "保存"}
           </button>
         </div>
       )}
