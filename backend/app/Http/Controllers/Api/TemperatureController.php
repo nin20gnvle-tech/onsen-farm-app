@@ -58,7 +58,7 @@ class TemperatureController extends Controller
 
         $validator = Validator::make($payload, [
             'location_id' => ['required', 'exists:temperature_locations,id'],
-            'readings' => ['required', 'array'],
+            'readings' => ['nullable', 'array'],
             'readings.*.measured_at' => ['required', 'date'],
             'readings.*.temperature' => ['nullable', 'numeric'],
             'readings.*.humidity' => ['nullable', 'numeric'],
@@ -70,15 +70,20 @@ class TemperatureController extends Controller
 
         $saved = 0;
 
+        if (empty($data['readings'])) {
+            return response()->json(['message' => 'saved', 'count' => 0]);
+        }
+
         DB::transaction(function () use ($data, &$saved) {
             foreach ($data['readings'] as $row) {
                 $temperature = $row['temperature'];
                 $humidity = $row['humidity'];
+                $measuredAt = Carbon::parse($row['measured_at'])->format('Y-m-d H:i:s');
 
                 if ($temperature === null && $humidity === null) {
                     TemperatureReading::query()
                         ->where('location_id', $data['location_id'])
-                        ->where('measured_at', $row['measured_at'])
+                        ->where('measured_at', $measuredAt)
                         ->delete();
                     continue;
                 }
@@ -86,9 +91,10 @@ class TemperatureController extends Controller
                 TemperatureReading::query()->updateOrCreate(
                     [
                         'location_id' => $data['location_id'],
-                        'measured_at' => $row['measured_at'],
+                        'measured_at' => $measuredAt,
                     ],
                     [
+                        'measured_at' => $measuredAt,
                         'temperature' => $temperature,
                         'humidity' => $humidity,
                         'source' => $row['source'] ?? 'manual',

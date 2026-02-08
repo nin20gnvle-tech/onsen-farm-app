@@ -876,11 +876,16 @@ export default function DashboardPage() {
       return Number.isNaN(num) ? null : num;
     };
 
+    const saveTargets = tempLocations.filter((location) => location.id);
+    if (saveTargets.length === 0) {
+      setTempSaveMsg("保存対象がありません");
+      return;
+    }
+
     setTempSaving(true);
     setTempSaveMsg("");
     try {
-      const tasks = tempLocations.map(async (location) => {
-        if (!location.id) return;
+      const tasks = saveTargets.map(async (location) => {
         const locationData = tempInputs[location.name] ?? {};
         const readings = [];
 
@@ -909,8 +914,9 @@ export default function DashboardPage() {
       await Promise.all(tasks);
       setTempSaveMsg("保存しました");
       window.setTimeout(() => setTempSaveMsg(""), 1500);
-    } catch {
-      setTempSaveMsg("保存に失敗しました");
+    } catch (e) {
+      const message = String(e?.message ?? e ?? "");
+      setTempSaveMsg(message ? `保存に失敗しました: ${message}` : "保存に失敗しました");
     } finally {
       setTempSaving(false);
     }
