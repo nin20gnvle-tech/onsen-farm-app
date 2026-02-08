@@ -8,6 +8,14 @@ export default function FieldTimeline({ fieldName, logs, dayStart, dayEnd, gridH
   const LANE_W = W - LANE_LEFT - LANE_RIGHT;
   const H_ROW = 58;
 
+  const formatQuantity = (value) => {
+    if (value === null || value === undefined || value === "") return "";
+    const num = Number(value);
+    if (!Number.isFinite(num)) return String(value);
+    if (Number.isInteger(num)) return String(num);
+    return String(num);
+  };
+
   const toLaneX = (min) => {
     const pct = (min - dayStart) / (dayEnd - dayStart);
     return clamp(pct, 0, 1) * LANE_W;
@@ -204,6 +212,14 @@ export default function FieldTimeline({ fieldName, logs, dayStart, dayEnd, gridH
               const canShowRight = x1 + width + timeTextWidth + 6 <= LANE_W;
               const canShowLeft = x1 - timeTextWidth - 6 >= 0;
               const placeOutsideRight = showOutsideTime && (canShowRight || !canShowLeft);
+              const detailParts = [];
+              if (log.product?.name) detailParts.push(`フルーツ:${log.product.name}`);
+              if (log.quantity != null || log.unit) {
+                const qty = formatQuantity(log.quantity);
+                detailParts.push(`数量:${qty}${log.unit ? ` ${log.unit}` : ""}`);
+              }
+              if (log.memo) detailParts.push(`メモ:${log.memo}`);
+              const detailText = detailParts.join(" / ");
 
               return (
                 <div
@@ -279,7 +295,20 @@ export default function FieldTimeline({ fieldName, logs, dayStart, dayEnd, gridH
                       right: LANE_RIGHT,
                     }}
                   >
-                    <div style={{ display: "flex", gap: 8, alignItems: "baseline", flexWrap: "wrap" }} />
+                    {detailText && (
+                      <div
+                        style={{
+                          fontSize: 11,
+                          color: "#475569",
+                          fontWeight: 700,
+                          whiteSpace: "nowrap",
+                          overflow: "hidden",
+                          textOverflow: "ellipsis",
+                        }}
+                      >
+                        {detailText}
+                      </div>
+                    )}
 
                     {/* バー（ガント風） */}
                     {startMin != null && (

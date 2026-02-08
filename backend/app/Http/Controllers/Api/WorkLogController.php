@@ -217,6 +217,19 @@ public function show(WorkLog $workLog)
     return new WorkLogResource($workLog);
 }
 
+public function destroy(WorkLog $workLog)
+{
+    if ($workLog->status !== 'done') {
+        throw ValidationException::withMessages([
+            'status' => ['work log must be done to delete'],
+        ]);
+    }
+
+    $workLog->delete();
+
+    return response()->json(['message' => 'deleted']);
+}
+
 public function active(Request $request)
 {
     $data = $request->validate([

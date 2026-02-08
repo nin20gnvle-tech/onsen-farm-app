@@ -30,6 +30,7 @@ Route::post('/work-logs/{workLog}/resume', [WorkLogController::class, 'resume'])
 Route::post('/work-logs/{workLog}/stop', [WorkLogController::class, 'stop']);
 Route::post('/work-logs/{workLog}/details', [WorkLogController::class, 'updateDetails']);
 Route::post('/work-logs/{workLog}/undo', [WorkLogController::class, 'undo']);
+Route::delete('/work-logs/{workLog}', [WorkLogController::class, 'destroy']);
 Route::get('/work-logs/{workLog}', [WorkLogController::class, 'show']);
 
 Route::get('/invites/{token}', [InviteController::class, 'show']);

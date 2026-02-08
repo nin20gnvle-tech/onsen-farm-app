@@ -84,6 +84,10 @@ export default function DashboardPage() {
   const [editErr, setEditErr] = useState("");
   const [editLoading, setEditLoading] = useState(false);
   const [editTargetId, setEditTargetId] = useState(null);
+  const [deleteOpen, setDeleteOpen] = useState(false);
+  const [deleteTargetId, setDeleteTargetId] = useState(null);
+  const [deleteErr, setDeleteErr] = useState("");
+  const [deleteLoading, setDeleteLoading] = useState(false);
   const [actionErr, setActionErr] = useState("");
   const [actionLoading, setActionLoading] = useState(false);
   const [inventoryItems, setInventoryItems] = useState([]);
@@ -623,12 +627,28 @@ export default function DashboardPage() {
       field: log.field?.name ?? "圃場",
       task: log.task_type?.name ?? "作業",
       user: log.user?.name ?? "作業者",
+      product: log.product?.name ?? "",
+      quantity: log.quantity ?? null,
+      unit: log.unit ?? "",
+      memo: log.memo ?? "",
     }));
     return { members, tasks, workLines };
   }, [activeLogs, doneLogs]);
   const workContentText = useMemo(() => {
     if (dailySummary.workLines.length === 0) return "";
-    return dailySummary.workLines.map((line) => `・${line.field} ${line.task}（${line.user}）`).join("\n");
+    return dailySummary.workLines
+      .map((line) => {
+        const details = [];
+        if (line.product) details.push(`フルーツ:${line.product}`);
+        if (line.quantity != null || line.unit) {
+          const qty = line.quantity != null ? formatQuantity(line.quantity) : "";
+          details.push(`数量:${qty}${line.unit ? ` ${line.unit}` : ""}`);
+        }
+        if (line.memo) details.push(`メモ:${String(line.memo).replace(/\n+/g, " ")}`);
+        const suffix = details.length ? ` / ${details.join(" / ")}` : "";
+        return `・${line.field} ${line.task}（${line.user}）${suffix}`;
+      })
+      .join("\n");
   }, [dailySummary.workLines]);
   useEffect(() => {
     if (!dailyAttendanceTouched) {
@@ -1002,6 +1022,41 @@ export default function DashboardPage() {
     callWorkLogAction(currentDoneLog, "undo");
   };
 
+  const handleDeleteOpen = () => {
+    if (!doneLogs.length) {
+      setDeleteErr("完了した作業がありません");
+      setDeleteOpen(true);
+      return;
+    }
+    setDeleteErr("");
+    const first = doneLogs[0] ?? null;
+    setDeleteTargetId(first?.id ?? null);
+    setDeleteOpen(true);
+  };
+
+  const handleDeleteConfirm = async () => {
+    if (!deleteTargetId) {
+      setDeleteErr("削除する作業を選択してください");
+      return;
+    }
+    setDeleteLoading(true);
+    setDeleteErr("");
+    try {
+      const res = await fetch(`${BASE_URL}/api/work-logs/${deleteTargetId}`, {
+        method: "DELETE",
+        headers: { Accept: "application/json" },
+      });
+      const json = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(json?.message ?? `HTTP ${res.status}`);
+      setDeleteOpen(false);
+      await load();
+    } catch (e) {
+      setDeleteErr(String(e?.message ?? e));
+    } finally {
+      setDeleteLoading(false);
+    }
+  };
+
   const renderSectionTitle = (text) => (
     <div style={sectionTitleRow}>
       <div style={sectionTitleTab}>{text}</div>
@@ -1103,6 +1158,14 @@ export default function DashboardPage() {
                     {(!sec.logs || sec.logs.length === 0) && <div style={mobileLogEmpty}>この圃場のログはありません</div>}
                     <div style={{ display: "grid", gap: 8 }}>
                       {(sec.logs ?? []).map((log) => {
+                        const detailParts = [];
+                        if (log.product?.name) detailParts.push(`フルーツ:${log.product.name}`);
+                        if (log.quantity != null || log.unit) {
+                          const qty = log.quantity != null ? formatQuantity(log.quantity) : "";
+                          detailParts.push(`数量:${qty}${log.unit ? ` ${log.unit}` : ""}`);
+                        }
+                        if (log.memo) detailParts.push(`メモ:${log.memo}`);
+                        const detailText = detailParts.join(" / ");
                         const { label, style } = renderMobileStatus(log.status);
                         return (
                           <div key={log.id} style={mobileLogCard}>
@@ -1111,6 +1174,7 @@ export default function DashboardPage() {
                               <div style={{ ...mobileLogStatus, ...style }}>{label}</div>
                             </div>
                             <div style={mobileLogSub}>{log.task_type?.name ?? "作業"}</div>
+                            {detailText && <div style={mobileLogMeta}>{detailText}</div>}
                             <div style={mobileLogTime}>
                               作業時間：{log.started_time ?? "--:--"} → {log.ended_time ?? "--:--"}
                             </div>
@@ -1648,13 +1712,7 @@ export default function DashboardPage() {
           style={{
             ...actionBar,
             ...(isMobile ? { left: 10, right: 10 } : null),
-            gridTemplateColumns: isMobile
-              ? tab === "done"
-                ? "1.2fr 0.8fr"
-                : "1.6fr 0.7fr 0.7fr"
-              : tab === "done"
-                ? "1.6fr 0.8fr"
-                : "1.8fr 0.6fr 0.6fr",
+            gridTemplateColumns: isMobile ? "1.6fr 0.7fr 0.7fr" : "1.8fr 0.6fr 0.6fr",
           }}
         >
           <button onClick={openStart} style={actionBtnPrimary} disabled={actionLoading}>
@@ -1674,9 +1732,14 @@ export default function DashboardPage() {
               </button>
             </>
           ) : (
-            <button onClick={handleEditOpen} style={actionBtnGhost} disabled={actionLoading || !currentDoneLog}>
-              編集
-            </button>
+            <>
+              <button onClick={handleEditOpen} style={actionBtnGhost} disabled={actionLoading || !currentDoneLog}>
+                編集
+              </button>
+              <button onClick={handleDeleteOpen} style={actionBtnDanger} disabled={actionLoading || !currentDoneLog}>
+                削除
+              </button>
+            </>
           )}
         </div>
       )}
@@ -2020,6 +2083,48 @@ export default function DashboardPage() {
               </button>
               <button onClick={handleEditSave} style={modalStartBtn} disabled={editLoading}>
                 {editLoading ? "保存中..." : "保存"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {deleteOpen && (
+        <div style={modalOverlay}>
+          <div style={modalCard}>
+            <div style={{ fontWeight: 900, fontSize: 16, marginBottom: 8 }}>完了ログ削除</div>
+            {deleteErr && (
+              <div style={{ color: "#b91c1c", background: "#fff", border: "1px solid #fecaca", padding: 8, borderRadius: 10 }}>
+                {deleteErr}
+              </div>
+            )}
+            <div style={{ display: "grid", gap: 10 }}>
+              <label style={modalLabel}>
+                削除する作業
+                <select
+                  value={deleteTargetId ?? ""}
+                  onChange={(e) => setDeleteTargetId(Number(e.target.value))}
+                  style={modalSelect}
+                >
+                  {doneLogs.map((l) => (
+                    <option key={l.id} value={l.id}>
+                      {`${l.task_type?.name ?? "作業"} / ${l.user?.name ?? "?"} / ${l.started_time ?? "--:--"} → ${
+                        l.ended_time ?? "--:--"
+                      }`}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <div style={{ color: "#6b7280", fontSize: 12 }}>
+                ※ 削除すると復元できません。
+              </div>
+            </div>
+            <div style={{ display: "flex", gap: 8, marginTop: 12, alignItems: "center" }}>
+              <button onClick={() => setDeleteOpen(false)} style={modalSkipBtn} disabled={deleteLoading}>
+                閉じる
+              </button>
+              <button onClick={handleDeleteConfirm} style={modalDeleteBtn} disabled={deleteLoading}>
+                {deleteLoading ? "削除中..." : "削除"}
               </button>
             </div>
           </div>
@@ -2659,6 +2764,13 @@ const mobileLogSub = {
   fontSize: 12,
   color: "#475569",
   fontWeight: 700,
+};
+
+const mobileLogMeta = {
+  fontSize: 11,
+  color: "#475569",
+  fontWeight: 600,
+  lineHeight: 1.4,
 };
 
 const mobileLogTime = {
@@ -3493,6 +3605,16 @@ const modalStartBtn = {
   borderRadius: 12,
   border: "1px solid #111827",
   background: "#111827",
+  color: "#fff",
+  fontWeight: 800,
+};
+
+const modalDeleteBtn = {
+  flex: 1,
+  height: 44,
+  borderRadius: 12,
+  border: "1px solid #ef4444",
+  background: "#ef4444",
   color: "#fff",
   fontWeight: 800,
 };
