@@ -51,8 +51,11 @@ php artisan serve
 ```bash
 cd frontend
 npm install
+cp .env.example .env
 npm run dev
 ```
+#### 環境変数（Frontend）
+- `VITE_API_BASE_URL`: APIのベースURL（例: `http://127.0.0.1:8000`）
 
 ---
 
@@ -71,6 +74,33 @@ npm run dev
 
 ## 画面イメージ
 （スクリーンショットを追加予定）
+
+---
+
+## 公開（Vercel + Render）
+### Render（Backend）
+1. Renderで「New Web Service」→ GitHub連携
+2. Root Directory: `backend`
+3. Build Command: `composer install && php artisan migrate --force`
+4. Start Command: `php artisan serve --host 0.0.0.0 --port $PORT`
+5. 環境変数（例）
+   - `APP_KEY`（`php artisan key:generate --show` で取得）
+   - `APP_ENV=production`
+   - `APP_DEBUG=false`
+   - `APP_URL`（RenderのURL）
+   - `APP_TIMEZONE=Asia/Tokyo`
+   - DBは本番ではMySQL/PostgreSQL推奨（SQLiteは開発向け）
+
+### Vercel（Frontend）
+1. Vercelで「New Project」→ GitHub連携
+2. Root Directory: `frontend`
+3. Build Command: `npm run build`
+4. Output Directory: `dist`
+5. 環境変数
+   - `VITE_API_BASE_URL` = RenderのURL
+
+### CORS
+- Backendの `config/cors.php` で Vercel のURLを許可
 
 ---
 
