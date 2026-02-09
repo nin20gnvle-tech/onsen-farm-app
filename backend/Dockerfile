@@ -15,9 +15,10 @@ RUN mkdir -p bootstrap/cache \
     storage/framework/views \
     storage/framework/cache \
     storage/framework/sessions \
-    && chmod -R 775 bootstrap/cache storage
+    database \
+    && chmod -R 775 bootstrap/cache storage database
 
 RUN composer install --no-dev --optimize-autoloader
 
 EXPOSE 10000
-CMD ["sh", "-c", "php artisan migrate --force && php -S 0.0.0.0:${PORT} -t public"]
+CMD ["sh", "-c", "touch database/database.sqlite && php artisan migrate --force --seed && php -S 0.0.0.0:${PORT} -t public"]
