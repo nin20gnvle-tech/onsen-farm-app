@@ -6,8 +6,8 @@
 ---
 
 ## デモ
-- 公開URL: （準備中）
-- YouTubeデモ: （準備中）
+- 公開URL: https://onsen-farm-app.vercel.app/
+- YouTubeデモ: http://youtube.com/watch?v=pU7WJ6L-r1A
 
 ---
 
