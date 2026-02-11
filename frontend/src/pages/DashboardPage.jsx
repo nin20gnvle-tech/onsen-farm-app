@@ -1092,7 +1092,7 @@ export default function DashboardPage() {
   const bottomTabIconStyle = isMobile ? { ...bottomTabIcon, fontSize: 18, lineHeight: "18px" } : bottomTabIcon;
 
   return (
-    <div style={{ minHeight: "100vh", background: "#f8fafc", paddingBottom: 144 }}>
+    <div style={{ minHeight: "100vh", background: "#f8fafc", paddingBottom: 144, overflowX: "hidden" }}>
       <div style={topBar}>
         <div style={topBarInnerStyle}>
           <div style={topLogo}>
@@ -1624,7 +1624,7 @@ export default function DashboardPage() {
                         <span style={avatarPlaceholder}>未設定</span>
                       )}
                     </div>
-                    <div style={{ display: "grid", gap: 6 }}>
+                    <div style={avatarActions}>
                       <input
                         type="file"
                         accept="image/*"
@@ -2860,6 +2860,9 @@ const settingsInput = {
   background: "#fff",
   color: "#111827",
   fontSize: 14,
+  width: "100%",
+  maxWidth: "100%",
+  boxSizing: "border-box",
 };
 
 const settingsTextarea = {
@@ -2871,12 +2874,16 @@ const settingsTextarea = {
   color: "#111827",
   fontSize: 14,
   resize: "vertical",
+  width: "100%",
+  maxWidth: "100%",
+  boxSizing: "border-box",
 };
 
 const avatarRow = {
   display: "flex",
-  alignItems: "center",
+  alignItems: "flex-start",
   gap: 12,
+  flexWrap: "wrap",
 };
 
 const avatarPreview = {
@@ -2906,6 +2913,14 @@ const avatarPlaceholder = {
 const avatarInput = {
   ...settingsInput,
   height: 36,
+  display: "block",
+};
+
+const avatarActions = {
+  display: "grid",
+  gap: 6,
+  flex: 1,
+  minWidth: 0,
 };
 
 const avatarRemoveBtn = {
