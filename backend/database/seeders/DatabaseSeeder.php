@@ -4,6 +4,7 @@ namespace Database\Seeders;
 
 use App\Models\Field;
 use App\Models\Product;
+use App\Models\Item;
 use App\Models\TaskType;
 use App\Models\User;
 use App\Models\WorkLog;
@@ -32,40 +33,79 @@ class DatabaseSeeder extends Seeder
             'password' => Hash::make('bbbbbbbb'),
         ]);
 
-        $fieldIds = Field::query()->whereIn('name', [
-            'テスト園場',
-            '第一園場',
-            '第二園場',
-            '第三園場',
-            '第四園場',
-        ])->pluck('id');
+        $fieldNames = [
+            '2連右棟',
+            '2連左棟',
+            '3連右棟',
+            '3連中棟',
+            '3連左棟',
+            '単連',
+            '椎茸場',
+            'ブルーベリー場',
+        ];
 
-        $taskTypeIds = TaskType::query()->whereIn('name', [
-            'テスト作業',
-        ])->pluck('id');
+        $taskTypeNames = [
+            '灌水',
+            '定植',
+            '収穫',
+            '虫取り',
+            '加工(裁断・冷凍・パック・肥料作成)',
+            '補修',
+            '配送・買出',
+            '剪定',
+            '施肥',
+            '防除',
+        ];
+
+        $productNames = [
+            'バナナ',
+            'パイナップル',
+            'ライチ・マンゴー・リュウガン・サポジラ',
+            '椎茸',
+            'ブルーベリー',
+        ];
+
+        $itemNames = [
+            '農薬a',
+            '農薬b',
+            '農薬c',
+            '農薬d',
+            'あいうえお農薬',
+            'かきくけこ農薬',
+            'さしすせそ農薬',
+            'わをん農薬',
+        ];
+
+        $removedFieldIds = Field::query()->whereNotIn('name', $fieldNames)->pluck('id');
+        $removedTaskTypeIds = TaskType::query()->whereNotIn('name', $taskTypeNames)->pluck('id');
+        $removedProductIds = Product::query()->whereNotIn('name', $productNames)->pluck('id');
 
         // 外部キー制約を避けるため、関連する作業ログを先に削除
         WorkLog::query()
-            ->whereIn('field_id', $fieldIds)
-            ->orWhereIn('task_type_id', $taskTypeIds)
+            ->whereIn('field_id', $removedFieldIds)
+            ->orWhereIn('task_type_id', $removedTaskTypeIds)
+            ->orWhereIn('product_id', $removedProductIds)
             ->delete();
 
-        Field::query()->whereIn('id', $fieldIds)->delete();
-        TaskType::query()->whereIn('id', $taskTypeIds)->delete();
+        Field::query()->whereNotIn('name', $fieldNames)->delete();
+        TaskType::query()->whereNotIn('name', $taskTypeNames)->delete();
+        Product::query()->whereNotIn('name', $productNames)->delete();
+        Item::query()->whereNotIn('name', $itemNames)->delete();
 
-        Product::query()->whereIn('name', [
-            'いちご',
-            'みかん',
-            'りんご',
-            'ぶどう',
-        ])->delete();
-
-        foreach (['第1圃場', '第2圃場', '第3圃場', '第4圃場'] as $name) {
+        foreach ($fieldNames as $name) {
             Field::firstOrCreate(['name' => $name]);
         }
 
-        foreach (['剪定', '収穫', '施肥', '防除'] as $name) {
+        foreach ($taskTypeNames as $name) {
             TaskType::firstOrCreate(['name' => $name]);
+        }
+
+        foreach ($productNames as $name) {
+            Product::firstOrCreate(['name' => $name]);
+        }
+
+        foreach ($itemNames as $name) {
+            Item::firstOrCreate(['name' => $name], ['unit' => null, 'is_active' => true]);
         }
 
         $locations = [
